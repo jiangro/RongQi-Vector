@@ -1,0 +1,16 @@
+package com.rongqi.vector.core;
+
+/**
+ * RongQi Vector 对外暴露的统一错误码。
+ */
+public enum VectorErrorCode {
+    VECTOR_CONFIG_INVALID,
+    VECTOR_DOMAIN_INVALID,
+    VECTOR_SCHEMA_INVALID,
+    VECTOR_FILTER_INVALID,
+    VECTOR_EMBEDDING_PROVIDER_NOT_FOUND,
+    VECTOR_EMBEDDING_FAILED,
+    VECTOR_MILVUS_FAILED,
+    VECTOR_REQUEST_TOO_LARGE
+}
+

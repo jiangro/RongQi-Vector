@@ -1,0 +1,780 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RongQi Vector HTTP 接口文档",
+    "description": "可导入 Apipost。支持两种方式：1. Java 用户传 domain 使用注解模型；2. 纯 HTTP 用户先调用 /api/vector/collections/ensure 定义 collection、字段、索引和 embedding 映射，再通过 collection 调用写入、搜索、删除。",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:18080",
+      "description": "本地开发环境"
+    }
+  ],
+  "tags": [
+    {
+      "name": "基础",
+      "description": "健康检查和诊断"
+    },
+    {
+      "name": "Collection 管理",
+      "description": "纯 HTTP 用户通过接口定义 collection、字段、索引和 embedding 映射"
+    },
+    {
+      "name": "向量数据",
+      "description": "写入、搜索和删除向量数据"
+    }
+  ],
+  "paths": {
+    "/api/vector/health": {
+      "get": {
+        "tags": ["基础"],
+        "summary": "健康检查",
+        "description": "检查服务是否启动成功。",
+        "responses": {
+          "200": {
+            "description": "服务正常",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "name": "RongQi Vector",
+                  "status": "UP"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/diagnose": {
+      "get": {
+        "tags": ["基础"],
+        "summary": "Domain 诊断",
+        "description": "仅用于 Java domain 注解模式。纯 HTTP collection 模式请先调用 /api/vector/collections/ensure。",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "description": "业务 Domain 完整类名，该类必须已在服务 classpath 中。",
+            "schema": {
+              "type": "string",
+              "example": "com.example.KnowledgeChunk"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "诊断成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "messages": [
+                    "domain 注解解析成功: com.example.KnowledgeChunk",
+                    "collection: knowledge_chunk_v1"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/collections/ensure": {
+      "post": {
+        "tags": ["Collection 管理"],
+        "summary": "创建或注册 Collection",
+        "description": "纯 HTTP 用户使用该接口定义 collection。它的作用等价于 Java 用户在 domain 上写 @VectorCollection、@VectorField、@VectorIndex 和 @VectorEmbeddingText。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorCollectionDefinition"
+              },
+              "example": {
+                "database": "knowledge_base",
+                "collection": "knowledge_chunk_v1",
+                "description": "知识片段向量集合",
+                "autoCreate": true,
+                "autoCreateIndex": true,
+                "validateSchema": true,
+                "fields": [
+                  {
+                    "name": "chunk_id",
+                    "type": "VARCHAR",
+                    "primaryKey": true,
+                    "autoId": false,
+                    "maxLength": 128,
+                    "filterable": true,
+                    "output": true
+                  },
+                  {
+                    "name": "tenant_id",
+                    "type": "INT64",
+                    "filterable": true,
+                    "output": true
+                  },
+                  {
+                    "name": "biz_id",
+                    "type": "VARCHAR",
+                    "maxLength": 128,
+                    "filterable": true,
+                    "output": true
+                  },
+                  {
+                    "name": "business_code",
+                    "type": "VARCHAR",
+                    "maxLength": 64,
+                    "filterable": true,
+                    "output": true
+                  },
+                  {
+                    "name": "title",
+                    "type": "VARCHAR",
+                    "maxLength": 512,
+                    "output": true
+                  },
+                  {
+                    "name": "content",
+                    "type": "VARCHAR",
+                    "maxLength": 8192,
+                    "output": true
+                  },
+                  {
+                    "name": "embedding",
+                    "type": "FLOAT_VECTOR",
+                    "dimension": 1024,
+                    "metricType": "COSINE",
+                    "output": false
+                  }
+                ],
+                "indexes": [
+                  {
+                    "field": "embedding",
+                    "name": "idx_embedding",
+                    "type": "HNSW",
+                    "metricType": "COSINE",
+                    "params": {
+                      "M": 16,
+                      "efConstruction": 200
+                    }
+                  },
+                  {
+                    "field": "tenant_id",
+                    "name": "idx_tenant_id",
+                    "type": "INVERTED"
+                  },
+                  {
+                    "field": "business_code",
+                    "name": "idx_business_code",
+                    "type": "INVERTED"
+                  }
+                ],
+                "embeddings": [
+                  {
+                    "textField": "content",
+                    "vectorField": "embedding",
+                    "provider": "http",
+                    "model": "bge-large-zh"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建或注册成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "code": "SUCCESS",
+                  "message": "success",
+                  "data": {
+                    "collection": "knowledge_chunk_v1",
+                    "fieldCount": 7,
+                    "indexCount": 3,
+                    "embeddingCount": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "字段、索引或 Milvus 调用错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/documents/upsert": {
+      "post": {
+        "tags": ["向量数据"],
+        "summary": "写入或更新数据",
+        "description": "支持两种模式：传 domain 表示 Java 注解模式；传 collection 表示纯 HTTP Schema 模式。纯 HTTP 用户应先调用 /api/vector/collections/ensure。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorUpsertRequest"
+              },
+              "examples": {
+                "collectionMode": {
+                  "summary": "纯 HTTP collection 模式",
+                  "value": {
+                    "collection": "knowledge_chunk_v1",
+                    "items": [
+                      {
+                        "chunk_id": "doc_001_chunk_001",
+                        "tenant_id": 1001,
+                        "biz_id": "doc-001",
+                        "business_code": "faq",
+                        "title": "发票申请说明",
+                        "content": "登录系统后进入订单页面，选择需要开票的订单并提交发票信息。"
+                      }
+                    ]
+                  }
+                },
+                "domainMode": {
+                  "summary": "Java domain 注解模式",
+                  "value": {
+                    "domain": "com.example.KnowledgeChunk",
+                    "items": [
+                      {
+                        "chunkId": "doc_001_chunk_001",
+                        "tenantId": 1001,
+                        "businessCode": "faq",
+                        "content": "登录系统后进入订单页面，选择需要开票的订单并提交发票信息。"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "写入成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteApiResponse"
+                },
+                "example": {
+                  "success": true,
+                  "code": "SUCCESS",
+                  "message": "success",
+                  "data": {
+                    "count": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/search": {
+      "post": {
+        "tags": ["向量数据"],
+        "summary": "向量搜索",
+        "description": "支持 collection 模式和 domain 模式。collection 模式下字段名使用创建 collection 时定义的字段名，例如 tenant_id；domain 模式下字段名使用 Java 字段名，例如 tenantId。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorSearchRequest"
+              },
+              "examples": {
+                "collectionMode": {
+                  "summary": "纯 HTTP collection 模式",
+                  "value": {
+                    "collection": "knowledge_chunk_v1",
+                    "query": "如何申请发票",
+                    "topK": 5,
+                    "minScore": 0.2,
+                    "outputFields": ["chunk_id", "tenant_id", "biz_id", "business_code", "title", "content"],
+                    "filterObject": {
+                      "tenant_id": 1001,
+                      "business_code": "faq"
+                    }
+                  }
+                },
+                "domainMode": {
+                  "summary": "Java domain 注解模式",
+                  "value": {
+                    "domain": "com.example.KnowledgeChunk",
+                    "query": "如何申请发票",
+                    "topK": 5,
+                    "filterObject": {
+                      "tenantId": 1001,
+                      "businessCode": "faq"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "搜索成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchApiResponse"
+                },
+                "example": {
+                  "success": true,
+                  "code": "SUCCESS",
+                  "message": "success",
+                  "data": {
+                    "hits": [
+                      {
+                        "score": 0.873,
+                        "entity": {
+                          "chunk_id": "doc_001_chunk_001",
+                          "tenant_id": 1001,
+                          "business_code": "faq",
+                          "title": "发票申请说明",
+                          "content": "登录系统后进入订单页面，选择需要开票的订单并提交发票信息。"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vector/documents/delete": {
+      "post": {
+        "tags": ["向量数据"],
+        "summary": "删除数据",
+        "description": "支持按 ids 主键删除，也支持按 filterObject 条件删除。collection 模式字段名使用 schema 字段名；domain 模式字段名使用 Java 字段名。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorDeleteRequest"
+              },
+              "examples": {
+                "collectionDeleteByIds": {
+                  "summary": "collection 模式按主键删除",
+                  "value": {
+                    "collection": "knowledge_chunk_v1",
+                    "ids": ["doc_001_chunk_001"]
+                  }
+                },
+                "collectionDeleteByFilter": {
+                  "summary": "collection 模式按条件删除",
+                  "value": {
+                    "collection": "knowledge_chunk_v1",
+                    "filterObject": {
+                      "tenant_id": 1001,
+                      "business_code": "faq"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteApiResponse"
+                },
+                "example": {
+                  "success": true,
+                  "code": "SUCCESS",
+                  "message": "success",
+                  "data": {
+                    "count": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "VectorCollectionDefinition": {
+        "type": "object",
+        "required": ["collection", "fields"],
+        "properties": {
+          "database": {
+            "type": "string",
+            "description": "Milvus database 名称。为空时使用服务默认 database。",
+            "example": "knowledge_base"
+          },
+          "collection": {
+            "type": "string",
+            "description": "Milvus collection 名称。",
+            "example": "knowledge_chunk_v1"
+          },
+          "description": {
+            "type": "string",
+            "description": "Collection 说明。",
+            "example": "知识片段向量集合"
+          },
+          "autoCreate": {
+            "type": "boolean",
+            "description": "Collection 不存在时是否自动创建。",
+            "example": true
+          },
+          "autoCreateIndex": {
+            "type": "boolean",
+            "description": "索引不存在时是否自动创建。",
+            "example": true
+          },
+          "validateSchema": {
+            "type": "boolean",
+            "description": "是否校验已存在 schema。当前版本已存在 collection 时采用保守策略，不自动修改 schema。",
+            "example": true
+          },
+          "fields": {
+            "type": "array",
+            "description": "字段定义。必须且只能有一个 primaryKey=true 字段。",
+            "items": {
+              "$ref": "#/components/schemas/VectorFieldDefinition"
+            }
+          },
+          "indexes": {
+            "type": "array",
+            "description": "索引定义。",
+            "items": {
+              "$ref": "#/components/schemas/VectorIndexDefinition"
+            }
+          },
+          "embeddings": {
+            "type": "array",
+            "description": "文本字段到向量字段的 embedding 映射。",
+            "items": {
+              "$ref": "#/components/schemas/VectorEmbeddingDefinition"
+            }
+          }
+        }
+      },
+      "VectorFieldDefinition": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "字段名。collection 模式后续写入、搜索、删除都使用这个字段名。",
+            "example": "tenant_id"
+          },
+          "type": {
+            "type": "string",
+            "description": "字段类型。",
+            "enum": ["BOOL", "INT8", "INT16", "INT32", "INT64", "FLOAT", "DOUBLE", "VARCHAR", "JSON", "ARRAY", "FLOAT_VECTOR", "BINARY_VECTOR", "SPARSE_FLOAT_VECTOR"],
+            "example": "INT64"
+          },
+          "primaryKey": {
+            "type": "boolean",
+            "description": "是否主键。",
+            "example": false
+          },
+          "autoId": {
+            "type": "boolean",
+            "description": "是否由 Milvus 自动生成主键。",
+            "example": false
+          },
+          "maxLength": {
+            "type": "integer",
+            "description": "VARCHAR 最大长度。",
+            "example": 128
+          },
+          "dimension": {
+            "type": "integer",
+            "description": "向量维度，FLOAT_VECTOR 必填。",
+            "example": 1024
+          },
+          "metricType": {
+            "type": "string",
+            "description": "向量相似度类型。",
+            "enum": ["COSINE", "L2", "IP"],
+            "example": "COSINE"
+          },
+          "filterable": {
+            "type": "boolean",
+            "description": "是否允许作为 filterObject 查询或删除条件。",
+            "example": true
+          },
+          "output": {
+            "type": "boolean",
+            "description": "搜索时默认是否返回该字段。向量字段建议 false。",
+            "example": true
+          }
+        }
+      },
+      "VectorIndexDefinition": {
+        "type": "object",
+        "required": ["field", "type"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "要创建索引的字段名。",
+            "example": "embedding"
+          },
+          "name": {
+            "type": "string",
+            "description": "索引名称。",
+            "example": "idx_embedding"
+          },
+          "type": {
+            "type": "string",
+            "description": "索引类型。",
+            "enum": ["HNSW", "IVF_FLAT", "IVF_SQ8", "AUTOINDEX", "INVERTED"],
+            "example": "HNSW"
+          },
+          "metricType": {
+            "type": "string",
+            "description": "向量索引相似度类型。",
+            "enum": ["COSINE", "L2", "IP"],
+            "example": "COSINE"
+          },
+          "params": {
+            "type": "object",
+            "description": "索引参数，例如 HNSW 的 M 和 efConstruction。",
+            "additionalProperties": true,
+            "example": {
+              "M": 16,
+              "efConstruction": 200
+            }
+          }
+        }
+      },
+      "VectorEmbeddingDefinition": {
+        "type": "object",
+        "required": ["textField", "vectorField"],
+        "properties": {
+          "textField": {
+            "type": "string",
+            "description": "需要生成 embedding 的文本字段。",
+            "example": "content"
+          },
+          "vectorField": {
+            "type": "string",
+            "description": "embedding 结果写入的向量字段。",
+            "example": "embedding"
+          },
+          "provider": {
+            "type": "string",
+            "description": "EmbeddingProvider 名称。为空时使用服务默认 provider。",
+            "example": "http"
+          },
+          "model": {
+            "type": "string",
+            "description": "模型名称。",
+            "example": "bge-large-zh"
+          }
+        }
+      },
+      "VectorUpsertRequest": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Java domain 完整类名。domain 和 collection 二选一。",
+            "example": "com.example.KnowledgeChunk"
+          },
+          "collection": {
+            "type": "string",
+            "description": "HTTP Schema 模式的 collection 名称。domain 和 collection 二选一。",
+            "example": "knowledge_chunk_v1"
+          },
+          "items": {
+            "type": "array",
+            "description": "待写入数据。",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "VectorSearchRequest": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Java domain 完整类名。domain 和 collection 二选一。"
+          },
+          "collection": {
+            "type": "string",
+            "description": "HTTP Schema 模式的 collection 名称。domain 和 collection 二选一。"
+          },
+          "query": {
+            "type": "string",
+            "description": "查询文本，服务会自动生成 embedding。query 和 vector 二选一。"
+          },
+          "vector": {
+            "type": "array",
+            "description": "已有查询向量。query 和 vector 二选一。",
+            "items": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "filterObject": {
+            "type": "object",
+            "description": "过滤条件。collection 模式使用 schema 字段名，domain 模式使用 Java 字段名。",
+            "additionalProperties": true
+          },
+          "topK": {
+            "type": "integer",
+            "description": "返回条数，默认 10。"
+          },
+          "minScore": {
+            "type": "number",
+            "format": "double",
+            "description": "最低相似度分数。"
+          },
+          "outputFields": {
+            "type": "array",
+            "description": "指定返回字段。",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VectorDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Java domain 完整类名。domain 和 collection 二选一。"
+          },
+          "collection": {
+            "type": "string",
+            "description": "HTTP Schema 模式的 collection 名称。domain 和 collection 二选一。"
+          },
+          "ids": {
+            "type": "array",
+            "description": "按主键删除。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filterObject": {
+            "type": "object",
+            "description": "按条件删除。为空时会拒绝执行，避免误删。",
+            "additionalProperties": true
+          }
+        }
+      },
+      "WriteApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "是否成功"
+          },
+          "code": {
+            "type": "string",
+            "description": "响应码"
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "description": "处理数量。按条件删除时可能为 -1。"
+              }
+            }
+          }
+        }
+      },
+      "SearchApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "是否成功"
+          },
+          "code": {
+            "type": "string",
+            "description": "响应码"
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "hits": {
+                "type": "array",
+                "description": "命中结果",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "score": {
+                      "type": "number",
+                      "description": "相似度分数"
+                    },
+                    "entity": {
+                      "type": "object",
+                      "description": "返回数据",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "code": {
+            "type": "string",
+            "example": "VECTOR_SCHEMA_INVALID"
+          },
+          "message": {
+            "type": "string",
+            "example": "collection 未注册，请先调用 /api/vector/collections/ensure"
+          },
+          "data": {
+            "nullable": true,
+            "example": null
+          }
+        }
+      }
+    }
+  }
+}

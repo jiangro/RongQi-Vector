@@ -1,0 +1,129 @@
+{
+  "database": "knowledge_base",
+  "collection": "knowledge_chunk_v1",
+  "description": "知识片段向量集合",
+  "autoCreate": true,
+  "autoCreateIndex": true,
+  "validateSchema": true,
+  "dynamicFieldEnabled": false,
+  "fields": [
+    {
+      "name": "chunk_id",
+      "type": "VARCHAR",
+      "primaryKey": true,
+      "autoId": false,
+      "maxLength": 128,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": true,
+      "output": true
+    },
+    {
+      "name": "tenant_id",
+      "type": "INT64",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": -1,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": true,
+      "output": true
+    },
+    {
+      "name": "biz_id",
+      "type": "VARCHAR",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": 128,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": true,
+      "output": true
+    },
+    {
+      "name": "business_code",
+      "type": "VARCHAR",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": 64,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": true,
+      "output": true
+    },
+    {
+      "name": "title",
+      "type": "VARCHAR",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": 512,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": false,
+      "output": true
+    },
+    {
+      "name": "content",
+      "type": "VARCHAR",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": 8192,
+      "dimension": -1,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": false,
+      "output": true
+    },
+    {
+      "name": "embedding",
+      "type": "FLOAT_VECTOR",
+      "primaryKey": false,
+      "autoId": false,
+      "maxLength": -1,
+      "dimension": 1024,
+      "metricType": "COSINE",
+      "nullable": true,
+      "filterable": false,
+      "output": false
+    }
+  ],
+  "indexes": [
+    {
+      "field": "embedding",
+      "name": "idx_embedding",
+      "type": "HNSW",
+      "metricType": "COSINE",
+      "params": {
+        "M": 16,
+        "efConstruction": 200
+      }
+    },
+    {
+      "field": "tenant_id",
+      "name": "idx_tenant_id",
+      "type": "INVERTED",
+      "metricType": "COSINE",
+      "params": {}
+    },
+    {
+      "field": "business_code",
+      "name": "idx_business_code",
+      "type": "INVERTED",
+      "metricType": "COSINE",
+      "params": {}
+    }
+  ],
+  "embeddings": [
+    {
+      "textField": "content",
+      "vectorField": "embedding",
+      "provider": "http",
+      "model": "text-embedding-v4"
+    }
+  ]
+}
