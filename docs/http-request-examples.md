@@ -15,7 +15,8 @@
 
 - Milvus 中存在 `knowledge_chunk_v1` 不代表 RongQi Vector 服务已经注册了它的字段、索引和 embedding 映射。
 - 第一次使用或服务重启后，建议先调用 `POST /api/vector/collections/ensure`。
-- 服务会把 schema 持久化到 `rongqi.vector.schema.storage-dir`，默认是 `data/rongqi-vector/collections`，重启后会自动加载。
+- 服务会把 schema 持久化到配置的 schema store 中，默认是 `file` 模式，目录为 `data/rongqi-vector/collections`，重启后会自动加载。
+- `file` 模式适合开发和单机测试；多实例生产环境建议配置 `rongqi.vector.schema.type=jdbc`，把 schema 存储到数据库。
 
 ### 1.1 创建 Collection
 
@@ -192,6 +193,26 @@ Content-Type: application/json
 }
 ```
 
+复杂过滤搜索：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 5,
+  "outputFields": ["chunk_id", "tenant_id", "title", "content"],
+  "filters": [
+    { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+    { "field": "tenant_id", "operator": "LT", "value": 2000 },
+    { "field": "business_code", "operator": "IN", "value": ["faq", "invoice"] },
+    { "field": "business_code", "operator": "NOT_IN", "value": ["draft"] },
+    { "field": "title", "operator": "LIKE", "value": "%发票%" }
+  ]
+}
+```
+
+`filters.operator` 支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE`。过滤字段必须是主键字段，或者在 collection schema 中配置 `filterable=true`。
+
 按已有向量搜索：
 
 ```json
@@ -236,7 +257,20 @@ Content-Type: application/json
 }
 ```
 
-注意：按条件删除时，`filterObject` 不能为空，避免误删整个 Collection。
+按复杂条件删除：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "filters": [
+    { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+    { "field": "tenant_id", "operator": "LT", "value": 2000 },
+    { "field": "business_code", "operator": "NOT_IN", "value": ["draft"] }
+  ]
+}
+```
+
+注意：按条件删除时，`filterObject` 或 `filters` 不能为空，避免误删整个 Collection。如果同时传 `ids` 和条件，接口会优先按 `ids` 删除。
 
 ## 2. Java Domain 模式
 
