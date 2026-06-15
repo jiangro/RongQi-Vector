@@ -289,6 +289,41 @@ SearchResult<KnowledgeChunk> result = vectorTemplate.search(
 );
 ```
 
+复杂过滤条件建议写在 `SearchOptions` 中。`filter` 对象仍然兼容旧用法，只适合表达“字段等于某个值”；`SearchOptions` 支持大于、小于、列表包含、列表排除和模糊匹配。
+
+```java
+SearchResult<KnowledgeChunk> result = vectorTemplate.search(
+        KnowledgeChunk.class,
+        "如何申请发票",
+        null,
+        SearchOptions.builder()
+                .topK(5)
+                .gte("tenantId", 1000L)
+                .lt("tenantId", 2000L)
+                .in("tenantId", List.of(1001L, 1002L))
+                .notIn("tenantId", List.of(9999L))
+                .like("title", "%发票%")
+                .outputFields("chunk_id", "tenant_id", "title", "content")
+                .build()
+);
+```
+
+可用的复杂过滤方法如下：
+
+| 方法 | 含义 | 示例 |
+| --- | --- | --- |
+| `eq(field, value)` | 等于 | `.eq("tenantId", 1001L)` |
+| `ne(field, value)` | 不等于 | `.ne("tenantId", 1002L)` |
+| `gt(field, value)` | 大于 | `.gt("tenantId", 1000L)` |
+| `gte(field, value)` | 大于等于 | `.gte("tenantId", 1000L)` |
+| `lt(field, value)` | 小于 | `.lt("tenantId", 2000L)` |
+| `lte(field, value)` | 小于等于 | `.lte("tenantId", 2000L)` |
+| `in(field, values)` | 在列表中 | `.in("tenantId", List.of(1001L, 1002L))` |
+| `notIn(field, values)` | 不在列表中 | `.notIn("tenantId", List.of(9999L))` |
+| `like(field, pattern)` | 模糊匹配 | `.like("title", "%发票%")` |
+
+注意：过滤字段必须是主键字段，或者在注解中配置了 `filterable = true`。如果要对 `title` 做模糊匹配，需要把字段定义为 `@VectorField(maxLength = 512, filterable = true)`。
+
 ### 8. 删除数据
 
 ```java
@@ -705,6 +740,26 @@ Content-Type: application/json
 }
 ```
 
+### 复杂过滤搜索示例
+
+`filterObject` 适合简单等值过滤；需要大于、小于、列表包含、列表排除或模糊匹配时，使用 `filters`。
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 5,
+  "filters": [
+    { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+    { "field": "tenant_id", "operator": "LT", "value": 2000 },
+    { "field": "tenant_id", "operator": "IN", "value": [1001, 1002] },
+    { "field": "tenant_id", "operator": "NOT_IN", "value": [9999] },
+    { "field": "title", "operator": "LIKE", "value": "%发票%" }
+  ],
+  "outputFields": ["chunk_id", "tenant_id", "title", "content"]
+}
+```
+
 ### 直接传向量搜索示例
 
 ```json
@@ -729,14 +784,25 @@ Content-Type: application/json
 | `query` | string | 和 `vector` 二选一 | 无 | 搜索文本，会自动生成 embedding |
 | `vector` | array | 和 `query` 二选一 | 无 | 已生成好的向量 |
 | `filterObject` | object | 否 | 空对象 | 过滤条件，只会使用非空字段，例如只搜索 `tenant_id=1001` 的数据 |
+| `filters` | array | 否 | 空数组 | 复杂过滤条件，支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE` |
 | `topK` | number | 否 | `10` | 返回最相似的前 N 条 |
 | `minScore` | number | 否 | 无 | 最低分数，小于该分数的结果会被过滤 |
 | `outputFields` | array | 否 | schema 默认输出字段 | 指定返回字段；为空时返回 `output=true` 的字段 |
 
-| 模式 | filterObject 字段名怎么写 | 示例 |
+| 模式 | `filterObject` / `filters.field` 字段名怎么写 | 示例 |
 | --- | --- | --- |
 | domain 模式 | 使用 Java 字段名 | `{ "tenantId": 1001 }` |
 | collection 模式 | 使用 `/collections/ensure` 中定义的字段名 | `{ "tenant_id": 1001 }` |
+
+`filters` 中每个对象包含三个字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `field` | string | 过滤字段名 |
+| `operator` | string | 过滤操作符：`EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE` |
+| `value` | any | 过滤值；`IN` 和 `NOT_IN` 必须传数组，`LIKE` 必须传字符串 |
+
+注意：过滤字段必须是主键字段，或者在 schema 中配置了 `filterable=true`。模糊匹配由 Milvus filter 表达式执行，通常用于标量字符串字段；大段正文建议优先通过向量召回，不建议直接做大范围模糊过滤。
 
 ### 响应示例
 
@@ -948,7 +1014,7 @@ java -jar vector-server\target\vector-server-0.1.0-SNAPSHOT.jar
 
 ## 开发规范
 
-更完整的开发规范见：
+开发前先阅读完整开发规范：
 
 ```text
 docs/development-standards.md

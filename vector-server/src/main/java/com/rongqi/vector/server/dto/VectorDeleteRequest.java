@@ -7,6 +7,7 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 /**
  * HTTP 删除请求。
@@ -16,9 +17,22 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString(onlyExplicitlyIncluded = true)
 public class VectorDeleteRequest {
+    @ToString.Include
     private String domain;
+    @ToString.Include
     private String collection;
     private List<Object> ids = new ArrayList<>();
     private Map<String, Object> filterObject = new LinkedHashMap<>();
+
+    @ToString.Include(name = "idsSize")
+    private int idsSize() {
+        return ids == null ? 0 : ids.size();
+    }
+
+    @ToString.Include(name = "filterFieldCount")
+    private int filterFieldCount() {
+        return filterObject == null ? 0 : filterObject.size();
+    }
 }

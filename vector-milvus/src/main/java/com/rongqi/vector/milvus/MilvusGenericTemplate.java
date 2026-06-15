@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.rongqi.vector.annotation.VectorDataType;
 import com.rongqi.vector.core.DeleteResult;
+import com.rongqi.vector.core.FilterCondition;
+import com.rongqi.vector.core.FilterOperator;
 import com.rongqi.vector.core.SearchHit;
 import com.rongqi.vector.core.SearchOptions;
 import com.rongqi.vector.core.SearchResult;
@@ -128,7 +130,7 @@ public class MilvusGenericTemplate {
                 .topK(Math.max(1, actualOptions.getTopK()))
                 .searchParams(resolveSearchParams(actualOptions))
                 .outputFields(resolveOutputFields(definition, actualOptions));
-        String filter = buildFilter(definition, filterObject);
+        String filter = buildFilter(definition, filterObject, actualOptions.getFilterConditions());
         if (filter != null && !filter.trim().isEmpty()) {
             builder.filter(filter);
         }
@@ -246,27 +248,100 @@ public class MilvusGenericTemplate {
     }
 
     private String buildFilter(VectorCollectionDefinition definition, Map<String, Object> filterObject) {
-        if (filterObject == null || filterObject.isEmpty()) {
-            return "";
-        }
+        return buildFilter(definition, filterObject, Collections.emptyList());
+    }
+
+    private String buildFilter(VectorCollectionDefinition definition, Map<String, Object> filterObject,
+                               List<FilterCondition> filterConditions) {
         List<String> conditions = new ArrayList<>();
-        for (Map.Entry<String, Object> entry : filterObject.entrySet()) {
-            VectorFieldDefinition field = requireField(definition, entry.getKey());
-            if (!field.isPrimaryKey() && !field.isFilterable()) {
-                throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                        "字段不允许作为过滤条件: " + entry.getKey());
-            }
-            if (entry.getValue() instanceof Collection) {
-                List<String> values = new ArrayList<>();
-                for (Object value : (Collection<?>) entry.getValue()) {
-                    values.add(formatValue(value));
+        if (filterObject == null || filterObject.isEmpty()) {
+            // 没有旧版 filterObject 条件。
+        } else {
+            // 兼容旧用法：filterObject 中的字段按等值条件处理，集合值按 in 条件处理。
+            for (Map.Entry<String, Object> entry : filterObject.entrySet()) {
+                VectorFieldDefinition field = requireField(definition, entry.getKey());
+                validateFilterable(field);
+                if (entry.getValue() instanceof Collection) {
+                    conditions.add(toListCondition(field.getName(), "in", entry.getValue()));
+                } else {
+                    conditions.add(toCondition(field.getName(), FilterOperator.EQ, entry.getValue()));
                 }
-                conditions.add(field.getName() + " in [" + String.join(",", values) + "]");
-            } else {
-                conditions.add(field.getName() + " == " + formatValue(entry.getValue()));
+            }
+        }
+        if (filterConditions != null) {
+            // 新用法：SearchOptions 中的显式条件支持范围、列表和模糊匹配。
+            for (FilterCondition condition : filterConditions) {
+                if (condition == null || condition.getField() == null || condition.getField().trim().isEmpty()) {
+                    continue;
+                }
+                VectorFieldDefinition field = requireField(definition, condition.getField());
+                validateFilterable(field);
+                conditions.add(toCondition(field.getName(), condition.getOperator(), condition.getValue()));
             }
         }
         return String.join(" and ", conditions);
+    }
+
+    private void validateFilterable(VectorFieldDefinition field) {
+        if (!field.isPrimaryKey() && !field.isFilterable()) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    "字段不允许作为过滤条件: " + field.getName());
+        }
+    }
+
+    private String toCondition(String fieldName, FilterOperator operator, Object value) {
+        if (value == null) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    "过滤条件的值不能为空: " + fieldName);
+        }
+        FilterOperator actualOperator = operator == null ? FilterOperator.EQ : operator;
+        switch (actualOperator) {
+            case EQ:
+                if (value instanceof Collection) {
+                    return toListCondition(fieldName, "in", value);
+                }
+                return fieldName + " == " + formatValue(value);
+            case NE:
+                return fieldName + " != " + formatValue(value);
+            case GT:
+                return fieldName + " > " + formatValue(value);
+            case GTE:
+                return fieldName + " >= " + formatValue(value);
+            case LT:
+                return fieldName + " < " + formatValue(value);
+            case LTE:
+                return fieldName + " <= " + formatValue(value);
+            case IN:
+                return toListCondition(fieldName, "in", value);
+            case NOT_IN:
+                return toListCondition(fieldName, "not in", value);
+            case LIKE:
+                if (!(value instanceof CharSequence)) {
+                    throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                            "like 过滤条件的值必须是字符串: " + fieldName);
+                }
+                return fieldName + " like " + formatValue(value);
+            default:
+                throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                        "不支持的过滤操作符: " + actualOperator);
+        }
+    }
+
+    private String toListCondition(String fieldName, String operator, Object value) {
+        if (!(value instanceof Collection)) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    operator + " 过滤条件的值必须是集合: " + fieldName);
+        }
+        Collection<?> values = (Collection<?>) value;
+        if (values.isEmpty()) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    operator + " 过滤条件的值不能为空: " + fieldName);
+        }
+        List<String> formattedValues = new ArrayList<>();
+        for (Object item : values) {
+            formattedValues.add(formatValue(item));
+        }
+        return fieldName + " " + operator + " [" + String.join(",", formattedValues) + "]";
     }
 
     private VectorFieldDefinition requireField(VectorCollectionDefinition definition, String fieldName) {

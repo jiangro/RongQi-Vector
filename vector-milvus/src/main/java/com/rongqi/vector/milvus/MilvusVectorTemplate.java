@@ -137,7 +137,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         validateVectorDimension(vectorField, vector);
 
         SearchOptions actualOptions = options == null ? SearchOptions.topK(10) : options;
-        String filterExpression = filterExpressionBuilder.build(metadata, filter);
+        String filterExpression = filterExpressionBuilder.build(metadata, filter, actualOptions.getFilterConditions());
         SearchReq.SearchReqBuilder builder = SearchReq.builder()
                 .collectionName(metadata.getCollectionName())
                 .data(Collections.singletonList(new FloatVec(vector)))

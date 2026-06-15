@@ -6,6 +6,7 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 /**
  * HTTP 写入请求。
@@ -16,8 +17,16 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString(onlyExplicitlyIncluded = true)
 public class VectorUpsertRequest {
+    @ToString.Include
     private String domain;
+    @ToString.Include
     private String collection;
     private List<Map<String, Object>> items = new ArrayList<>();
+
+    @ToString.Include(name = "itemCount")
+    private int itemCount() {
+        return items == null ? 0 : items.size();
+    }
 }

@@ -177,6 +177,11 @@ public class VectorDocumentController {
                 builder.outputFields(outputField);
             }
         }
+        if (request.getFilters() != null) {
+            request.getFilters().stream()
+                    .filter(filter -> filter != null)
+                    .forEach(filter -> builder.filter(filter.getField(), filter.getOperator(), filter.getValue()));
+        }
         return builder.build();
     }
 
