@@ -1,12 +1,13 @@
 package com.rongqi.vector.server.dto;
 
+import com.rongqi.vector.core.JsonToString;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.ToString;
 
 /**
  * HTTP 写入请求。
@@ -17,16 +18,17 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(onlyExplicitlyIncluded = true)
 public class VectorUpsertRequest {
-    @ToString.Include
     private String domain;
-    @ToString.Include
     private String collection;
     private List<Map<String, Object>> items = new ArrayList<>();
 
-    @ToString.Include(name = "itemCount")
-    private int itemCount() {
-        return items == null ? 0 : items.size();
+    @Override
+    public String toString() {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("domain", domain);
+        summary.put("collection", collection);
+        summary.put("itemCount", items == null ? 0 : items.size());
+        return JsonToString.toJson(summary);
     }
 }

@@ -18,14 +18,34 @@ import java.util.StringJoiner;
 public class FilterExpressionBuilder {
     private final DomainValueAccessor accessor;
 
+    /**
+     * 创建过滤表达式构建器。
+     *
+     * @param accessor domain 字段访问器
+     */
     public FilterExpressionBuilder(DomainValueAccessor accessor) {
         this.accessor = accessor;
     }
 
+    /**
+     * 根据对象条件生成 Milvus filter 表达式。
+     *
+     * @param metadata domain 元数据
+     * @param filter 条件对象
+     * @return Milvus filter 表达式
+     */
     public String build(VectorCollectionMetadata metadata, Object filter) {
         return build(metadata, filter, Collections.emptyList());
     }
 
+    /**
+     * 根据对象条件和显式过滤条件生成 Milvus filter 表达式。
+     *
+     * @param metadata domain 元数据
+     * @param filter 条件对象，非空字段按等值条件处理
+     * @param filterConditions 显式过滤条件，支持范围、列表和模糊匹配
+     * @return Milvus filter 表达式
+     */
     public String build(VectorCollectionMetadata metadata, Object filter, List<FilterCondition> filterConditions) {
         List<String> conditions = new ArrayList<>();
         if (filter != null) {
@@ -55,6 +75,13 @@ public class FilterExpressionBuilder {
         return String.join(" and ", conditions);
     }
 
+    /**
+     * 根据主键值生成删除条件。
+     *
+     * @param metadata domain 元数据
+     * @param id 主键值
+     * @return 主键等值过滤表达式
+     */
     public String buildIdFilter(VectorCollectionMetadata metadata, Object id) {
         if (id == null) {
             throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,

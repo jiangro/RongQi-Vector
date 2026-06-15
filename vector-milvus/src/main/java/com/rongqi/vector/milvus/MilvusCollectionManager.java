@@ -96,6 +96,30 @@ public class MilvusCollectionManager {
         loadCollectionIfNeeded(definition.getCollection());
     }
 
+    /**
+     * 判断 Milvus 中是否存在指定 Collection。
+     *
+     * @param collectionName Collection 名称
+     * @return 存在时返回 true
+     */
+    public boolean hasCollection(String collectionName) {
+        return client().hasCollection(HasCollectionReq.builder()
+                .collectionName(collectionName)
+                .build());
+    }
+
+    /**
+     * 判断指定 Collection 是否已加载。
+     *
+     * @param collectionName Collection 名称
+     * @return 已加载时返回 true
+     */
+    public boolean isLoaded(String collectionName) {
+        return Boolean.TRUE.equals(client().getLoadState(GetLoadStateReq.builder()
+                .collectionName(collectionName)
+                .build()));
+    }
+
     private AddFieldReq toAddFieldReq(VectorFieldMetadata field) {
         AddFieldReq.AddFieldReqBuilder builder = AddFieldReq.builder()
                 .fieldName(field.getVectorName())

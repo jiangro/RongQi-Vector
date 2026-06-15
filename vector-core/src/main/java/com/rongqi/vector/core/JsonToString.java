@@ -8,7 +8,7 @@ import com.google.gson.GsonBuilder;
  *
  * <p>统一使用 Gson 输出 JSON，避免业务 domain 没有重写 toString 时出现“类名@hash”。</p>
  */
-final class JsonToString {
+public final class JsonToString {
     private static final Gson GSON = new GsonBuilder()
             .serializeNulls()
             .disableHtmlEscaping()
@@ -17,7 +17,13 @@ final class JsonToString {
     private JsonToString() {
     }
 
-    static String toJson(Object value) {
+    /**
+     * 将对象转换为 JSON 字符串。
+     *
+     * @param value 待转换对象
+     * @return JSON 字符串
+     */
+    public static String toJson(Object value) {
         return GSON.toJson(value);
     }
 }

@@ -1,5 +1,7 @@
 package com.rongqi.vector.server.dto;
 
+import com.rongqi.vector.core.FilterCondition;
+import com.rongqi.vector.core.JsonToString;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,7 +9,6 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.ToString;
 
 /**
  * HTTP 删除请求。
@@ -17,22 +18,21 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(onlyExplicitlyIncluded = true)
 public class VectorDeleteRequest {
-    @ToString.Include
     private String domain;
-    @ToString.Include
     private String collection;
     private List<Object> ids = new ArrayList<>();
     private Map<String, Object> filterObject = new LinkedHashMap<>();
+    private List<FilterCondition> filters = new ArrayList<>();
 
-    @ToString.Include(name = "idsSize")
-    private int idsSize() {
-        return ids == null ? 0 : ids.size();
-    }
-
-    @ToString.Include(name = "filterFieldCount")
-    private int filterFieldCount() {
-        return filterObject == null ? 0 : filterObject.size();
+    @Override
+    public String toString() {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("domain", domain);
+        summary.put("collection", collection);
+        summary.put("idsSize", ids == null ? 0 : ids.size());
+        summary.put("filterFieldCount", filterObject == null ? 0 : filterObject.size());
+        summary.put("filterConditionCount", filters == null ? 0 : filters.size());
+        return JsonToString.toJson(summary);
     }
 }

@@ -2,6 +2,7 @@ package com.rongqi.vector.milvus;
 
 import com.google.gson.JsonObject;
 import com.rongqi.vector.annotation.VectorDataType;
+import com.rongqi.vector.core.DeleteOptions;
 import com.rongqi.vector.core.DeleteResult;
 import com.rongqi.vector.core.SearchHit;
 import com.rongqi.vector.core.SearchOptions;
@@ -168,9 +169,15 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
 
     @Override
     public <T> DeleteResult delete(Class<T> domainType, T filter) {
+        return delete(domainType, filter, null);
+    }
+
+    @Override
+    public <T> DeleteResult delete(Class<T> domainType, T filter, DeleteOptions options) {
         VectorCollectionMetadata metadata = metadataParser.parse(domainType);
         collectionManager.ensureCollection(metadata);
-        String filterExpression = filterExpressionBuilder.build(metadata, filter);
+        DeleteOptions actualOptions = options == null ? DeleteOptions.builder().build() : options;
+        String filterExpression = filterExpressionBuilder.build(metadata, filter, actualOptions.getFilterConditions());
         if (filterExpression == null || filterExpression.trim().isEmpty()) {
             throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
                     "删除条件不能为空，避免误删整个 collection: " + metadata.getCollectionName());
@@ -202,10 +209,33 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         messages.add("milvus uri: " + properties.getUri());
         messages.add("field count: " + metadata.getFields().size());
         messages.add("index count: " + metadata.getIndexes().size());
+        messages.add("filterable fields: " + resolveFilterableFields(metadata));
+        messages.add("output fields: " + resolveDefaultOutputFields(metadata));
+        VectorFieldMetadata vectorField = resolveDefaultVectorField(metadata);
+        messages.add("default vector field: " + vectorField.getJavaName()
+                + " -> " + vectorField.getVectorName()
+                + ", dimension=" + vectorField.getDimension()
+                + ", metricType=" + vectorField.getMetricType());
         for (EmbeddingFieldMetadata embeddingField : metadata.getEmbeddingFields()) {
+            String providerName = resolveProviderName(embeddingField);
             messages.add("embedding field: " + embeddingField.getTextField()
                     + " -> " + embeddingField.getVectorField()
-                    + ", provider=" + resolveProviderName(embeddingField));
+                    + ", provider=" + providerName
+                    + ", providerReady=" + embeddingProviderRegistry.contains(providerName));
+        }
+        try {
+            boolean exists = collectionManager.hasCollection(metadata.getCollectionName());
+            messages.add("milvus collection exists: " + exists);
+            if (exists) {
+                messages.add("milvus collection loaded: " + collectionManager.isLoaded(metadata.getCollectionName()));
+            } else if (metadata.isAutoCreate()) {
+                messages.add("suggestion: collection 不存在，调用 ensureCollection/upsert/search 时会尝试自动创建");
+            } else {
+                messages.add("suggestion: collection 不存在且 autoCreate=false，请先创建 Milvus collection");
+            }
+        } catch (RuntimeException exception) {
+            messages.add("milvus connection check failed: " + exception.getMessage());
+            return new VectorDiagnosis(false, messages);
         }
         return new VectorDiagnosis(true, messages);
     }
@@ -312,6 +342,26 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         for (VectorFieldMetadata field : metadata.getFields()) {
             if (field.isOutput()) {
                 fields.add(field.getVectorName());
+            }
+        }
+        return fields;
+    }
+
+    private List<String> resolveFilterableFields(VectorCollectionMetadata metadata) {
+        List<String> fields = new ArrayList<>();
+        for (VectorFieldMetadata field : metadata.getFields()) {
+            if (field.isId() || field.isFilterable()) {
+                fields.add(field.getJavaName() + "->" + field.getVectorName());
+            }
+        }
+        return fields;
+    }
+
+    private List<String> resolveDefaultOutputFields(VectorCollectionMetadata metadata) {
+        List<String> fields = new ArrayList<>();
+        for (VectorFieldMetadata field : metadata.getFields()) {
+            if (field.isOutput()) {
+                fields.add(field.getJavaName() + "->" + field.getVectorName());
             }
         }
         return fields;

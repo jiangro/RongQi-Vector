@@ -155,6 +155,14 @@ public class MilvusGenericTemplate {
      * 按主键或对象条件删除。
      */
     public DeleteResult delete(String collection, List<Object> ids, Map<String, Object> filterObject) {
+        return delete(collection, ids, filterObject, Collections.emptyList());
+    }
+
+    /**
+     * 按主键、对象条件或复杂过滤条件删除。
+     */
+    public DeleteResult delete(String collection, List<Object> ids, Map<String, Object> filterObject,
+                               List<FilterCondition> filterConditions) {
         VectorCollectionDefinition definition = definitionRegistry.require(collection);
         collectionManager.ensureCollection(definition);
         int count = 0;
@@ -169,7 +177,7 @@ public class MilvusGenericTemplate {
             }
             return new DeleteResult(count);
         }
-        String filter = buildFilter(definition, filterObject);
+        String filter = buildFilter(definition, filterObject, filterConditions);
         if (filter == null || filter.trim().isEmpty()) {
             throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID, "删除条件不能为空，避免误删 collection: " + collection);
         }

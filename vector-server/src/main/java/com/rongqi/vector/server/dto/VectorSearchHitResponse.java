@@ -1,15 +1,15 @@
 package com.rongqi.vector.server.dto;
 
+import com.rongqi.vector.core.JsonToString;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.Getter;
-import lombok.ToString;
 
 /**
  * HTTP 检索命中的单条结果。
  */
 @Getter
-@ToString(onlyExplicitlyIncluded = true)
 public class VectorSearchHitResponse {
-    @ToString.Include
     private final double score;
     private final Object entity;
 
@@ -18,8 +18,11 @@ public class VectorSearchHitResponse {
         this.entity = entity;
     }
 
-    @ToString.Include(name = "entityType")
-    private String entityType() {
-        return entity == null ? null : entity.getClass().getName();
+    @Override
+    public String toString() {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("score", score);
+        summary.put("entityType", entity == null ? null : entity.getClass().getName());
+        return JsonToString.toJson(summary);
     }
 }

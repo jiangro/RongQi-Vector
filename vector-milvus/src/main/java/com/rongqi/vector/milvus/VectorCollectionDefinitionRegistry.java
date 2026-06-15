@@ -1,19 +1,11 @@
 package com.rongqi.vector.milvus;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.rongqi.vector.core.VectorErrorCode;
 import com.rongqi.vector.core.VectorException;
+import com.rongqi.vector.core.VectorErrorCode;
 import com.rongqi.vector.core.schema.VectorCollectionDefinition;
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Stream;
 
 /**
  * HTTP Schema Collection 定义注册表。
@@ -25,16 +17,14 @@ import java.util.stream.Stream;
  * 因此注册表支持持久化，服务重启后会自动加载已注册的 schema。</p>
  */
 public class VectorCollectionDefinitionRegistry {
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-
     private final Map<String, VectorCollectionDefinition> definitions = new ConcurrentHashMap<>();
-    private final Path storageDir;
+    private final VectorCollectionDefinitionStore store;
 
     /**
      * 创建只保存在内存中的注册表。
      */
     public VectorCollectionDefinitionRegistry() {
-        this(null);
+        this((VectorCollectionDefinitionStore) null);
     }
 
     /**
@@ -43,8 +33,17 @@ public class VectorCollectionDefinitionRegistry {
      * @param storageDir schema 文件存储目录。为空时只使用内存注册表。
      */
     public VectorCollectionDefinitionRegistry(Path storageDir) {
-        this.storageDir = storageDir;
-        loadFromDisk();
+        this(storageDir == null ? null : new FileVectorCollectionDefinitionStore(storageDir));
+    }
+
+    /**
+     * 创建使用指定存储实现的注册表。
+     *
+     * @param store schema 存储实现。为空时只使用内存注册表
+     */
+    public VectorCollectionDefinitionRegistry(VectorCollectionDefinitionStore store) {
+        this.store = store;
+        loadFromStore();
     }
 
     /**
@@ -55,7 +54,9 @@ public class VectorCollectionDefinitionRegistry {
             throw new VectorException(VectorErrorCode.VECTOR_SCHEMA_INVALID, "collection 不能为空");
         }
         definitions.put(definition.getCollection(), definition);
-        persist(definition);
+        if (store != null) {
+            store.save(definition);
+        }
     }
 
     /**
@@ -71,48 +72,14 @@ public class VectorCollectionDefinitionRegistry {
         return definition;
     }
 
-    private void loadFromDisk() {
-        if (storageDir == null || !Files.isDirectory(storageDir)) {
+    private void loadFromStore() {
+        if (store == null) {
             return;
         }
-        try (Stream<Path> paths = Files.list(storageDir)) {
-            paths.filter(path -> path.getFileName().toString().endsWith(".json"))
-                    .forEach(this::loadOne);
-        } catch (IOException exception) {
-            throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
-                    "加载 collection schema 目录失败: " + storageDir, exception);
-        }
-    }
-
-    private void loadOne(Path path) {
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            VectorCollectionDefinition definition = GSON.fromJson(reader, VectorCollectionDefinition.class);
+        for (VectorCollectionDefinition definition : store.loadAll()) {
             if (definition != null && definition.getCollection() != null && !definition.getCollection().trim().isEmpty()) {
                 definitions.put(definition.getCollection(), definition);
             }
-        } catch (IOException exception) {
-            throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
-                    "加载 collection schema 文件失败: " + path, exception);
         }
-    }
-
-    private void persist(VectorCollectionDefinition definition) {
-        if (storageDir == null) {
-            return;
-        }
-        try {
-            Files.createDirectories(storageDir);
-            Path target = storageDir.resolve(safeFileName(definition.getCollection()) + ".json");
-            try (Writer writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-                GSON.toJson(definition, writer);
-            }
-        } catch (IOException exception) {
-            throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
-                    "保存 collection schema 失败: " + definition.getCollection(), exception);
-        }
-    }
-
-    private String safeFileName(String collection) {
-        return collection.replaceAll("[^A-Za-z0-9_.-]", "_");
     }
 }

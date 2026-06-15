@@ -150,6 +150,8 @@ rongqi:
 | `rongqi.vector.http-embedding.dimension` | 是 | 模型输出向量维度，必须和向量字段维度一致 | `1024` |
 | `rongqi.vector.schema.storage-dir` | HTTP 模式需要 | HTTP Collection schema 保存目录 | `data/rongqi-vector/collections` |
 
+`rongqi.vector.schema.storage-dir` 只保存 HTTP collection 模式的 schema 定义，不保存向量数据；真正的向量和业务字段值存储在 Milvus 中。默认相对路径适合开发和单机测试，生产环境建议配置为应用外部的绝对路径，容器部署时建议挂载持久化 volume。多实例部署时建议实现数据库版 `VectorCollectionDefinitionStore`，避免每个实例读取到不同的本地 schema 文件。
+
 ### 3. 定义业务 Domain
 
 下面是一个知识片段示例。重点看注解，不需要手写 getter/setter。
@@ -507,6 +509,8 @@ GET /api/vector/diagnose?domain=com.example.demo.domain.KnowledgeChunk
 
 这个接口主要给 Maven 注解模式使用，用来检查 domain 注解、Collection、索引、EmbeddingProvider 是否配置正确。
 
+诊断结果会包含 Collection 名称、字段数量、索引数量、可过滤字段、默认输出字段、默认向量字段、EmbeddingProvider 是否已注册，以及 Milvus 中 Collection 是否存在、是否已加载。新项目接入失败时，建议先调用该接口确认配置和 Milvus 状态。
+
 | 参数 | 位置 | 类型 | 必填 | 说明 | 示例 |
 | --- | --- | --- | --- | --- | --- |
 | `domain` | Query | string | 是 | Java domain 完整类名 | `com.example.demo.domain.KnowledgeChunk` |
@@ -842,7 +846,9 @@ Content-Type: application/json
 删除支持两种方式：
 
 - 按主键删除：传 `ids`。
-- 按条件删除：传 `filterObject`。
+- 按条件删除：传 `filterObject` 或 `filters`。
+
+如果同时传 `ids` 和条件，接口会优先按 `ids` 删除。
 
 ### 按主键删除示例
 
@@ -864,14 +870,28 @@ Content-Type: application/json
 }
 ```
 
+### 按复杂条件删除示例
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "filters": [
+    { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+    { "field": "tenant_id", "operator": "LT", "value": 2000 },
+    { "field": "business_code", "operator": "NOT_IN", "value": ["draft"] }
+  ]
+}
+```
+
 ### 参数说明
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `domain` | string | domain 模式必填 | Java domain 完整类名，和 `collection` 二选一 |
 | `collection` | string | collection 模式必填 | HTTP 注册过的 Collection 名称，和 `domain` 二选一 |
-| `ids` | array | 和 `filterObject` 至少传一个 | 主键列表 |
-| `filterObject` | object | 和 `ids` 至少传一个 | 删除条件，只会使用非空字段 |
+| `ids` | array | 和 `filterObject`、`filters` 至少传一个 | 主键列表 |
+| `filterObject` | object | 和 `ids`、`filters` 至少传一个 | 简单等值删除条件，只会使用非空字段 |
+| `filters` | array | 和 `ids`、`filterObject` 至少传一个 | 复杂删除条件，支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE` |
 
 | 模式 | filterObject 字段名怎么写 | 示例 |
 | --- | --- | --- |

@@ -42,6 +42,11 @@ public interface VectorTemplate {
     <T> DeleteResult delete(Class<T> domainType, T filter);
 
     /**
+     * 根据对象条件和复杂过滤条件删除数据。
+     */
+    <T> DeleteResult delete(Class<T> domainType, T filter, DeleteOptions options);
+
+    /**
      * 根据主键删除数据。
      */
     <T, ID> DeleteResult deleteById(Class<T> domainType, ID id);
@@ -51,4 +56,3 @@ public interface VectorTemplate {
      */
     <T> VectorDiagnosis diagnose(Class<T> domainType);
 }
-

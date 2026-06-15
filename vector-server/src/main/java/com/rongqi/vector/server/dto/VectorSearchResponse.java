@@ -1,14 +1,15 @@
 package com.rongqi.vector.server.dto;
 
+import com.rongqi.vector.core.JsonToString;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
-import lombok.ToString;
 
 /**
  * HTTP 检索响应。
  */
 @Getter
-@ToString(onlyExplicitlyIncluded = true)
 public class VectorSearchResponse {
     private final List<VectorSearchHitResponse> hits;
 
@@ -16,8 +17,10 @@ public class VectorSearchResponse {
         this.hits = hits;
     }
 
-    @ToString.Include(name = "hitsSize")
-    private int hitsSize() {
-        return hits == null ? 0 : hits.size();
+    @Override
+    public String toString() {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("hitsSize", hits == null ? 0 : hits.size());
+        return JsonToString.toJson(summary);
     }
 }

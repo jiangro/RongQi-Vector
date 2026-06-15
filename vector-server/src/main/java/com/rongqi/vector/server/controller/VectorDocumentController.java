@@ -1,6 +1,7 @@
 package com.rongqi.vector.server.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rongqi.vector.core.DeleteOptions;
 import com.rongqi.vector.core.DeleteResult;
 import com.rongqi.vector.core.SearchHit;
 import com.rongqi.vector.core.SearchOptions;
@@ -99,7 +100,8 @@ public class VectorDocumentController {
             DeleteResult result = genericTemplate.delete(
                     request.getCollection(),
                     request.getIds(),
-                    request.getFilterObject());
+                    request.getFilterObject(),
+                    request.getFilters());
             return ApiResponse.success(new VectorWriteResponse(result.getCount()));
         }
         Class<?> domainType = resolveDomainType(request.getDomain());
@@ -111,12 +113,15 @@ public class VectorDocumentController {
             }
             return ApiResponse.success(new VectorWriteResponse(count));
         }
-        if (request.getFilterObject() == null || request.getFilterObject().isEmpty()) {
+        if ((request.getFilterObject() == null || request.getFilterObject().isEmpty())
+                && (request.getFilters() == null || request.getFilters().isEmpty())) {
             throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    "删除请求必须提供 ids 或 filterObject");
+                    "删除请求必须提供 ids、filterObject 或 filters");
         }
-        Object filter = toDomain(domainType, request.getFilterObject());
-        DeleteResult result = delete(domainType, filter);
+        Object filter = request.getFilterObject() == null || request.getFilterObject().isEmpty()
+                ? null
+                : toDomain(domainType, request.getFilterObject());
+        DeleteResult result = delete(domainType, filter, buildDeleteOptions(request));
         return ApiResponse.success(new VectorWriteResponse(result.getCount()));
     }
 
@@ -163,6 +168,12 @@ public class VectorDocumentController {
     }
 
     @SuppressWarnings("unchecked")
+    private DeleteResult delete(Class<?> domainType, Object filter, DeleteOptions options) {
+        Class<Object> typedDomain = (Class<Object>) domainType;
+        return vectorTemplate.delete(typedDomain, typedDomain.cast(filter), options);
+    }
+
+    @SuppressWarnings("unchecked")
     private DeleteResult deleteById(Class<?> domainType, Object id) {
         Class<Object> typedDomain = (Class<Object>) domainType;
         return vectorTemplate.deleteById(typedDomain, id);
@@ -177,6 +188,16 @@ public class VectorDocumentController {
                 builder.outputFields(outputField);
             }
         }
+        if (request.getFilters() != null) {
+            request.getFilters().stream()
+                    .filter(filter -> filter != null)
+                    .forEach(filter -> builder.filter(filter.getField(), filter.getOperator(), filter.getValue()));
+        }
+        return builder.build();
+    }
+
+    private DeleteOptions buildDeleteOptions(VectorDeleteRequest request) {
+        DeleteOptions.Builder builder = DeleteOptions.builder();
         if (request.getFilters() != null) {
             request.getFilters().stream()
                     .filter(filter -> filter != null)
