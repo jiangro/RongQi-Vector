@@ -23,5 +23,9 @@ public class VectorDiagnosis {
     public List<String> getMessages() {
         return messages;
     }
-}
 
+    @Override
+    public String toString() {
+        return JsonToString.toJson(this);
+    }
+}

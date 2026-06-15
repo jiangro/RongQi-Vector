@@ -13,5 +13,9 @@ public class DeleteResult {
     public int getCount() {
         return count;
     }
-}
 
+    @Override
+    public String toString() {
+        return JsonToString.toJson(this);
+    }
+}

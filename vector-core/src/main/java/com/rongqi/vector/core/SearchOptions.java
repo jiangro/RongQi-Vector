@@ -166,4 +166,9 @@ public class SearchOptions {
             return new SearchOptions(this);
         }
     }
+
+    @Override
+    public String toString() {
+        return JsonToString.toJson(this);
+    }
 }

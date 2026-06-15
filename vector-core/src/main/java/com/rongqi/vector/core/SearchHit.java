@@ -21,5 +21,9 @@ public class SearchHit<T> {
     public T getEntity() {
         return entity;
     }
-}
 
+    @Override
+    public String toString() {
+        return JsonToString.toJson(this);
+    }
+}

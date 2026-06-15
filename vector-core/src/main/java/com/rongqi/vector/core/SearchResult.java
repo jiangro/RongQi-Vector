@@ -23,5 +23,9 @@ public class SearchResult<T> {
     public List<SearchHit<T>> getHits() {
         return hits;
     }
-}
 
+    @Override
+    public String toString() {
+        return JsonToString.toJson(this);
+    }
+}
