@@ -300,10 +300,10 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
     private List<String> resolveOutputFields(VectorCollectionMetadata metadata, SearchOptions options) {
         if (!options.getOutputFields().isEmpty()) {
             List<String> fields = new ArrayList<>();
-            for (String javaName : options.getOutputFields()) {
-                fields.add(metadata.findFieldByJavaName(javaName)
+            for (String fieldName : options.getOutputFields()) {
+                fields.add(metadata.findFieldByName(fieldName)
                         .orElseThrow(() -> new VectorException(VectorErrorCode.VECTOR_SCHEMA_INVALID,
-                                "outputFields 指向的字段不存在: " + javaName))
+                                "outputFields 指向的字段不存在: " + fieldName))
                         .getVectorName());
             }
             return fields;

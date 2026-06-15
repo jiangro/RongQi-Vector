@@ -87,4 +87,12 @@ public class VectorCollectionMetadata {
     public Optional<VectorFieldMetadata> findFieldByJavaName(String javaName) {
         return fields.stream().filter(field -> field.getJavaName().equals(javaName)).findFirst();
     }
+
+    public Optional<VectorFieldMetadata> findFieldByName(String fieldName) {
+        Optional<VectorFieldMetadata> javaField = findFieldByJavaName(fieldName);
+        if (javaField.isPresent()) {
+            return javaField;
+        }
+        return fields.stream().filter(field -> field.getVectorName().equals(fieldName)).findFirst();
+    }
 }
