@@ -133,6 +133,7 @@ rongqi:
       dimension: 1024
       timeout-millis: 30000
     schema:
+      type: file
       storage-dir: data/rongqi-vector/collections
 ```
 
@@ -148,9 +149,32 @@ rongqi:
 | `rongqi.vector.http-embedding.api-key` | 视模型而定 | Embedding 服务密钥，建议用环境变量 | `${DASHSCOPE_API_KEY}` |
 | `rongqi.vector.http-embedding.model` | 使用 HTTP Provider 时必填 | Embedding 模型名称 | `text-embedding-v4` |
 | `rongqi.vector.http-embedding.dimension` | 是 | 模型输出向量维度，必须和向量字段维度一致 | `1024` |
+| `rongqi.vector.schema.type` | 否 | HTTP Collection schema 存储方式，支持 `file`、`jdbc` | `file` |
 | `rongqi.vector.schema.storage-dir` | HTTP 模式需要 | HTTP Collection schema 保存目录 | `data/rongqi-vector/collections` |
+| `rongqi.vector.schema.jdbc.table-name` | JDBC 模式需要 | JDBC schema 表名，只能包含字母、数字、下划线 | `vector_collection_schema` |
+| `rongqi.vector.schema.jdbc.initialize-schema` | 否 | JDBC 模式启动时是否自动建表 | `true` |
 
-`rongqi.vector.schema.storage-dir` 只保存 HTTP collection 模式的 schema 定义，不保存向量数据；真正的向量和业务字段值存储在 Milvus 中。默认相对路径适合开发和单机测试，生产环境建议配置为应用外部的绝对路径，容器部署时建议挂载持久化 volume。多实例部署时建议实现数据库版 `VectorCollectionDefinitionStore`，避免每个实例读取到不同的本地 schema 文件。
+schema 存储只保存 HTTP collection 模式的 schema 定义，不保存向量数据；真正的向量和业务字段值存储在 Milvus 中。`file` 模式适合开发、单机测试和容器挂载卷；多实例生产环境建议使用 `jdbc` 模式，让多个服务实例共享同一张 schema 表。
+
+JDBC schema 存储示例：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/rongqi_vector
+    username: root
+    password: your-password
+
+rongqi:
+  vector:
+    schema:
+      type: jdbc
+      jdbc:
+        table-name: vector_collection_schema
+        initialize-schema: true
+```
+
+JDBC 模式会使用 Spring 容器中的 `DataSource`。如果你的项目没有配置数据源，启动时会提示 `rongqi.vector.schema.type=jdbc 时必须提供 DataSource`。
 
 ### 3. 定义业务 Domain
 
@@ -434,7 +458,10 @@ http://127.0.0.1:18080
 | `RONGQI_VECTOR_HTTP_EMBEDDING_MODEL` | 使用 HTTP Provider 时必填 | 空 | Embedding 模型名称 |
 | `RONGQI_VECTOR_HTTP_EMBEDDING_DIMENSION` | 是 | `1024` | 模型输出维度 |
 | `RONGQI_VECTOR_HTTP_EMBEDDING_TIMEOUT_MILLIS` | 否 | `30000` | Embedding 请求超时时间 |
+| `RONGQI_VECTOR_SCHEMA_TYPE` | 否 | `file` | HTTP Collection schema 存储方式，支持 `file`、`jdbc` |
 | `RONGQI_VECTOR_SCHEMA_STORAGE_DIR` | 否 | `data/rongqi-vector/collections` | HTTP Collection schema 保存目录 |
+| `RONGQI_VECTOR_SCHEMA_JDBC_TABLE_NAME` | 否 | `vector_collection_schema` | JDBC schema 表名 |
+| `RONGQI_VECTOR_SCHEMA_JDBC_INITIALIZE_SCHEMA` | 否 | `true` | JDBC 模式是否自动建表 |
 
 DashScope OpenAI 兼容模式示例：
 
@@ -975,8 +1002,8 @@ $env:RONGQI_VECTOR_HTTP_EMBEDDING_MODEL='你的模型名称'
 处理方式：
 
 - 先调用 `/api/vector/collections/ensure`。
-- 或检查 `RONGQI_VECTOR_SCHEMA_STORAGE_DIR` 目录下是否存在对应 schema 文件。
-- 确认服务重启后能读取该目录。
+- 如果使用 `file` 模式，检查 `RONGQI_VECTOR_SCHEMA_STORAGE_DIR` 目录下是否存在对应 schema 文件，并确认服务重启后能读取该目录。
+- 如果使用 `jdbc` 模式，检查 `RONGQI_VECTOR_SCHEMA_TYPE=jdbc`、`spring.datasource.*`、`RONGQI_VECTOR_SCHEMA_JDBC_TABLE_NAME` 是否配置正确，并确认表中存在对应 collection 的 schema 记录。
 
 ### 3. 向量维度不一致
 
@@ -1034,11 +1061,7 @@ java -jar vector-server\target\vector-server-0.1.0-SNAPSHOT.jar
 
 ## 开发规范
 
-开发前先阅读完整开发规范：
 
-```text
-docs/development-standards.md
-```
 
 当前项目约定：
 

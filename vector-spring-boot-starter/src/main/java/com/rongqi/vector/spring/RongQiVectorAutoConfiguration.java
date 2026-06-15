@@ -1,17 +1,23 @@
 package com.rongqi.vector.spring;
 
 import com.rongqi.vector.core.VectorTemplate;
+import com.rongqi.vector.core.VectorErrorCode;
+import com.rongqi.vector.core.VectorException;
 import com.rongqi.vector.core.metadata.DomainMetadataParser;
 import com.rongqi.vector.embedding.EmbeddingProvider;
 import com.rongqi.vector.embedding.EmbeddingProviderRegistry;
 import com.rongqi.vector.embedding.NoopEmbeddingProvider;
 import com.rongqi.vector.embedding.http.HttpEmbeddingProperties;
 import com.rongqi.vector.embedding.http.HttpEmbeddingProvider;
+import com.rongqi.vector.milvus.FileVectorCollectionDefinitionStore;
+import com.rongqi.vector.milvus.JdbcVectorCollectionDefinitionStore;
 import com.rongqi.vector.milvus.MilvusClientProperties;
 import com.rongqi.vector.milvus.MilvusGenericTemplate;
 import com.rongqi.vector.milvus.MilvusVectorTemplate;
 import com.rongqi.vector.milvus.VectorCollectionDefinitionRegistry;
+import com.rongqi.vector.milvus.VectorCollectionDefinitionStore;
 import java.nio.file.Paths;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -65,8 +71,11 @@ public class RongQiVectorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public VectorCollectionDefinitionRegistry vectorCollectionDefinitionRegistry(RongQiVectorProperties properties) {
-        return new VectorCollectionDefinitionRegistry(Paths.get(properties.getSchema().getStorageDir()));
+    public VectorCollectionDefinitionRegistry vectorCollectionDefinitionRegistry(
+            RongQiVectorProperties properties,
+            ObjectProvider<DataSource> dataSourceProvider) {
+        return new VectorCollectionDefinitionRegistry(
+                vectorCollectionDefinitionStore(properties, dataSourceProvider));
     }
 
     @Bean
@@ -94,5 +103,32 @@ public class RongQiVectorAutoConfiguration {
         target.setDimension(source.getDimension());
         target.setTimeoutMillis(source.getTimeoutMillis());
         return target;
+    }
+
+    /**
+     * 根据配置创建 Collection schema 存储实现。
+     *
+     * <p>默认使用本地文件；显式配置为 jdbc 时使用 Spring 容器中的 DataSource。</p>
+     */
+    private VectorCollectionDefinitionStore vectorCollectionDefinitionStore(
+            RongQiVectorProperties properties,
+            ObjectProvider<DataSource> dataSourceProvider) {
+        String type = properties.getSchema().getType();
+        if (type == null || type.trim().isEmpty() || "file".equalsIgnoreCase(type)) {
+            return new FileVectorCollectionDefinitionStore(Paths.get(properties.getSchema().getStorageDir()));
+        }
+        if ("jdbc".equalsIgnoreCase(type)) {
+            DataSource dataSource = dataSourceProvider.getIfAvailable();
+            if (dataSource == null) {
+                throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
+                        "rongqi.vector.schema.type=jdbc 时必须提供 DataSource");
+            }
+            return new JdbcVectorCollectionDefinitionStore(
+                    dataSource,
+                    properties.getSchema().getJdbc().getTableName(),
+                    properties.getSchema().getJdbc().isInitializeSchema());
+        }
+        throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
+                "不支持的 schema 存储类型: " + type + "，可选值为 file 或 jdbc");
     }
 }

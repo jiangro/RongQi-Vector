@@ -152,7 +152,17 @@ public class RongQiVectorProperties {
      * HTTP Schema 持久化配置。
      */
     public static class Schema {
+        private String type = "file";
         private String storageDir = "data/rongqi-vector/collections";
+        private final Jdbc jdbc = new Jdbc();
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
 
         public String getStorageDir() {
             return storageDir;
@@ -160,6 +170,34 @@ public class RongQiVectorProperties {
 
         public void setStorageDir(String storageDir) {
             this.storageDir = storageDir;
+        }
+
+        public Jdbc getJdbc() {
+            return jdbc;
+        }
+    }
+
+    /**
+     * JDBC schema 持久化配置。
+     */
+    public static class Jdbc {
+        private String tableName = "vector_collection_schema";
+        private boolean initializeSchema = true;
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        public void setTableName(String tableName) {
+            this.tableName = tableName;
+        }
+
+        public boolean isInitializeSchema() {
+            return initializeSchema;
+        }
+
+        public void setInitializeSchema(boolean initializeSchema) {
+            this.initializeSchema = initializeSchema;
         }
     }
 }
