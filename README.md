@@ -330,7 +330,7 @@ SearchResult<KnowledgeChunk> result = vectorTemplate.search(
                 .lt("tenantId", 2000L)
                 .in("tenantId", List.of(1001L, 1002L))
                 .notIn("tenantId", List.of(9999L))
-                .like("title", "%发票%")
+                .like("title", "发票")
                 .outputFields("chunk_id", "tenant_id", "title", "content")
                 .build()
 );
@@ -348,7 +348,7 @@ SearchResult<KnowledgeChunk> result = vectorTemplate.search(
 | `lte(field, value)` | 小于等于 | `.lte("tenantId", 2000L)` |
 | `in(field, values)` | 在列表中 | `.in("tenantId", List.of(1001L, 1002L))` |
 | `notIn(field, values)` | 不在列表中 | `.notIn("tenantId", List.of(9999L))` |
-| `like(field, pattern)` | 模糊匹配 | `.like("title", "%发票%")` |
+| `like(field, pattern)` | 模糊匹配，未包含 `%` 时会自动按包含匹配处理 | `.like("title", "发票")` |
 
 注意：过滤字段必须是主键字段，或者在注解中配置了 `filterable = true`。如果要对 `title` 做模糊匹配，需要把字段定义为 `@VectorField(maxLength = 512, filterable = true)`。
 
@@ -788,7 +788,7 @@ Content-Type: application/json
     { "field": "tenant_id", "operator": "LT", "value": 2000 },
     { "field": "tenant_id", "operator": "IN", "value": [1001, 1002] },
     { "field": "tenant_id", "operator": "NOT_IN", "value": [9999] },
-    { "field": "title", "operator": "LIKE", "value": "%发票%" }
+    { "field": "title", "operator": "LIKE", "value": "发票" }
   ],
   "outputFields": ["chunk_id", "tenant_id", "title", "content"]
 }
@@ -834,7 +834,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | `field` | string | 过滤字段名 |
 | `operator` | string | 过滤操作符：`EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE` |
-| `value` | any | 过滤值；`IN` 和 `NOT_IN` 必须传数组，`LIKE` 必须传字符串 |
+| `value` | any | 过滤值；`IN` 和 `NOT_IN` 必须传数组，`LIKE` 必须传字符串。`LIKE` 值不包含 `%` 时会自动按包含匹配处理 |
 
 注意：过滤字段必须是主键字段，或者在 schema 中配置了 `filterable=true`。模糊匹配由 Milvus filter 表达式执行，通常用于标量字符串字段；大段正文建议优先通过向量召回，不建议直接做大范围模糊过滤。
 

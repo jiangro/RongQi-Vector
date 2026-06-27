@@ -310,7 +310,13 @@
                     "filterObject": {
                       "tenant_id": 1001,
                       "business_code": "faq"
-                    }
+                    },
+                    "filters": [
+                      { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+                      { "field": "tenant_id", "operator": "LT", "value": 2000 },
+                      { "field": "business_code", "operator": "IN", "value": ["faq", "invoice"] },
+                      { "field": "title", "operator": "LIKE", "value": "%发票%" }
+                    ]
                   }
                 },
                 "domainMode": {
@@ -366,7 +372,7 @@
       "post": {
         "tags": ["向量数据"],
         "summary": "删除数据",
-        "description": "支持按 ids 主键删除，也支持按 filterObject 条件删除。collection 模式字段名使用 schema 字段名；domain 模式字段名使用 Java 字段名。",
+        "description": "支持按 ids 主键删除，也支持按 filterObject 或 filters 条件删除。collection 模式字段名使用 schema 字段名；domain 模式字段名使用 Java 字段名。",
         "requestBody": {
           "required": true,
           "content": {
@@ -390,6 +396,17 @@
                       "tenant_id": 1001,
                       "business_code": "faq"
                     }
+                  }
+                },
+                "collectionDeleteByFilters": {
+                  "summary": "collection 模式按复杂条件删除",
+                  "value": {
+                    "collection": "knowledge_chunk_v1",
+                    "filters": [
+                      { "field": "tenant_id", "operator": "GTE", "value": 1000 },
+                      { "field": "tenant_id", "operator": "LT", "value": 2000 },
+                      { "field": "business_code", "operator": "NOT_IN", "value": ["draft"] }
+                    ]
                   }
                 }
               }
@@ -642,8 +659,15 @@
           },
           "filterObject": {
             "type": "object",
-            "description": "过滤条件。collection 模式使用 schema 字段名，domain 模式使用 Java 字段名。",
+            "description": "简单等值过滤条件。collection 模式使用 schema 字段名，domain 模式使用 Java 字段名。",
             "additionalProperties": true
+          },
+          "filters": {
+            "type": "array",
+            "description": "复杂过滤条件，支持 EQ、NE、GT、GTE、LT、LTE、IN、NOT_IN、LIKE。",
+            "items": {
+              "$ref": "#/components/schemas/FilterCondition"
+            }
           },
           "topK": {
             "type": "integer",
@@ -660,6 +684,23 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "FilterCondition": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "过滤字段名。collection 模式使用 schema 字段名，domain 模式使用 Java 字段名。"
+          },
+          "operator": {
+            "type": "string",
+            "description": "过滤操作符。",
+            "enum": ["EQ", "NE", "GT", "GTE", "LT", "LTE", "IN", "NOT_IN", "LIKE"]
+          },
+          "value": {
+            "description": "过滤值。IN 和 NOT_IN 必须传数组，LIKE 必须传字符串。"
           }
         }
       },
@@ -683,8 +724,15 @@
           },
           "filterObject": {
             "type": "object",
-            "description": "按条件删除。为空时会拒绝执行，避免误删。",
+            "description": "简单等值删除条件。为空且没有 ids、filters 时会拒绝执行，避免误删。",
             "additionalProperties": true
+          },
+          "filters": {
+            "type": "array",
+            "description": "复杂删除条件，支持 EQ、NE、GT、GTE、LT、LTE、IN、NOT_IN、LIKE。",
+            "items": {
+              "$ref": "#/components/schemas/FilterCondition"
+            }
           }
         }
       },

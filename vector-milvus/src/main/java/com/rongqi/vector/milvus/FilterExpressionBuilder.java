@@ -132,7 +132,7 @@ public class FilterExpressionBuilder {
                     throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
                             "like 过滤条件的值必须是字符串: " + fieldName);
                 }
-                return fieldName + " like " + formatValue(value);
+                return fieldName + " like " + formatValue(normalizeLikePattern(value));
             default:
                 throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
                         "不支持的过滤操作符: " + actualOperator);
@@ -161,5 +161,18 @@ public class FilterExpressionBuilder {
             return String.valueOf(value);
         }
         return "\"" + String.valueOf(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    /**
+     * 规范化 LIKE 条件。
+     *
+     * <p>业务用户通常只关心要搜索的关键词，因此没有显式传入 % 时，默认按包含匹配处理。</p>
+     */
+    private String normalizeLikePattern(Object value) {
+        String pattern = String.valueOf(value);
+        if (pattern.contains("%")) {
+            return pattern;
+        }
+        return "%" + pattern + "%";
     }
 }
