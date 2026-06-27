@@ -35,7 +35,7 @@ public class Ranker {
         }
         List<SearchHit<T>> ranked = new ArrayList<>();
         for (SearchHit<T> hit : hits) {
-            double rankScore = hit.getScore();
+            double rankScore = hit.getRankScore() == null ? hit.getScore() : hit.getRankScore();
             for (FieldBoost boost : rankOptions.getFieldBoosts()) {
                 Number value = readNumber(hit.getEntity(), boost.getField());
                 if (value != null) {

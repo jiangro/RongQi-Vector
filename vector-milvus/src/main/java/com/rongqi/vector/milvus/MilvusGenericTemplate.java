@@ -16,6 +16,8 @@ import com.rongqi.vector.core.schema.VectorCollectionDefinition;
 import com.rongqi.vector.core.schema.VectorEmbeddingDefinition;
 import com.rongqi.vector.core.schema.VectorFieldDefinition;
 import com.rongqi.vector.core.rank.Ranker;
+import com.rongqi.vector.core.rerank.RerankProcessor;
+import com.rongqi.vector.core.rerank.RerankProviderRegistry;
 import com.rongqi.vector.embedding.EmbeddingOptions;
 import com.rongqi.vector.embedding.EmbeddingProvider;
 import com.rongqi.vector.embedding.EmbeddingProviderRegistry;
@@ -47,6 +49,7 @@ public class MilvusGenericTemplate {
     private final GenericEmbeddingBatchFiller embeddingBatchFiller;
     private final MilvusFilterExpressionFormatter filterFormatter;
     private final Ranker ranker;
+    private final RerankProcessor rerankProcessor;
 
     public MilvusGenericTemplate(MilvusClientProperties properties,
                                  EmbeddingProviderRegistry embeddingProviderRegistry,
@@ -69,6 +72,28 @@ public class MilvusGenericTemplate {
                                  String defaultEmbeddingProvider,
                                  VectorCollectionDefinitionRegistry definitionRegistry,
                                  int embeddingBatchSize) {
+        this(properties, embeddingProviderRegistry, defaultEmbeddingProvider, definitionRegistry, embeddingBatchSize,
+                new RerankProviderRegistry(), null);
+    }
+
+    /**
+     * 创建支持 rerank 的 HTTP collection 通用模板。
+     *
+     * @param properties Milvus 连接配置
+     * @param embeddingProviderRegistry EmbeddingProvider 注册表
+     * @param defaultEmbeddingProvider 默认 EmbeddingProvider 名称
+     * @param definitionRegistry HTTP collection schema 注册表
+     * @param embeddingBatchSize 每次批量生成 embedding 的文本数量
+     * @param rerankProviderRegistry RerankProvider 注册表
+     * @param defaultRerankProvider 默认 RerankProvider 名称
+     */
+    public MilvusGenericTemplate(MilvusClientProperties properties,
+                                 EmbeddingProviderRegistry embeddingProviderRegistry,
+                                 String defaultEmbeddingProvider,
+                                 VectorCollectionDefinitionRegistry definitionRegistry,
+                                 int embeddingBatchSize,
+                                 RerankProviderRegistry rerankProviderRegistry,
+                                 String defaultRerankProvider) {
         this.defaultEmbeddingProvider = defaultEmbeddingProvider == null || defaultEmbeddingProvider.trim().isEmpty()
                 ? "noop"
                 : defaultEmbeddingProvider;
@@ -79,6 +104,7 @@ public class MilvusGenericTemplate {
         this.definitionRegistry = definitionRegistry;
         this.filterFormatter = new MilvusFilterExpressionFormatter();
         this.ranker = new Ranker();
+        this.rerankProcessor = new RerankProcessor(rerankProviderRegistry, defaultRerankProvider);
         this.embeddingBatchFiller = new GenericEmbeddingBatchFiller(
                 embeddingProviderRegistry,
                 this.defaultEmbeddingProvider,
@@ -134,7 +160,7 @@ public class MilvusGenericTemplate {
                         .model(embedding == null ? "" : embedding.getModel())
                         .build()).get(0);
         validateVectorDimension(vectorField, vector);
-        return searchByVector(collection, vector, filterObject, options);
+        return searchByVector(collection, vector, filterObject, options, query);
     }
 
     /**
@@ -143,6 +169,13 @@ public class MilvusGenericTemplate {
     public SearchResult<Map<String, Object>> searchByVector(String collection, List<Float> vector,
                                                             Map<String, Object> filterObject,
                                                             SearchOptions options) {
+        return searchByVector(collection, vector, filterObject, options, null);
+    }
+
+    private SearchResult<Map<String, Object>> searchByVector(String collection, List<Float> vector,
+                                                             Map<String, Object> filterObject,
+                                                             SearchOptions options,
+                                                             String query) {
         VectorCollectionDefinition definition = definitionRegistry.require(collection);
         collectionManager.ensureCollection(definition);
         VectorFieldDefinition vectorField = resolveDefaultVectorField(definition);
@@ -175,7 +208,10 @@ public class MilvusGenericTemplate {
             entity.putIfAbsent(idField.getName(), result.getId());
             hits.add(new SearchHit<>(result.getScore(), entity));
         }
-        return new SearchResult<>(ranker.rank(hits, actualOptions));
+        if (query == null) {
+            return new SearchResult<>(ranker.rank(hits, actualOptions));
+        }
+        return new SearchResult<>(rerankProcessor.rank(query, hits, actualOptions));
     }
 
     /**

@@ -16,6 +16,7 @@
         <module>vector-annotation</module>
         <module>vector-core</module>
         <module>vector-embedding</module>
+        <module>vector-rerank</module>
         <module>vector-milvus</module>
         <module>vector-spring-boot-starter</module>
         <module>vector-server</module>

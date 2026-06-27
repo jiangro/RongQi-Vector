@@ -40,6 +40,39 @@ rongqi:
       max-retries: ${RONGQI_VECTOR_HTTP_EMBEDDING_MAX_RETRIES:2}
       # 每次 HTTP Embedding 重试前等待的时间，单位毫秒。
       retry-interval-millis: ${RONGQI_VECTOR_HTTP_EMBEDDING_RETRY_INTERVAL_MILLIS:500}
+    rerank:
+      # 是否启用内置 RerankProvider 注册；关闭时仍可通过自定义 Bean 注册 provider。
+      enabled: ${RONGQI_VECTOR_RERANK_ENABLED:false}
+      # 未在请求 RankOptions 中指定 rerankProvider 时使用的默认 provider 名称。
+      default-provider: ${RONGQI_VECTOR_RERANK_DEFAULT_PROVIDER:dashscope}
+      # HTTP Rerank 请求超时时间，单位毫秒。
+      timeout-millis: ${RONGQI_VECTOR_RERANK_TIMEOUT_MILLIS:30000}
+      # HTTP Rerank 请求遇到 429、5xx 或网络异常时的最大重试次数。
+      max-retries: ${RONGQI_VECTOR_RERANK_MAX_RETRIES:2}
+      # 每次 HTTP Rerank 重试前等待的时间，单位毫秒。
+      retry-interval-millis: ${RONGQI_VECTOR_RERANK_RETRY_INTERVAL_MILLIS:500}
+      dashscope:
+        # 是否启用阿里云 DashScope RerankProvider。
+        enabled: ${RONGQI_VECTOR_RERANK_DASHSCOPE_ENABLED:false}
+        # DashScope RerankProvider 注册名称，请求里可通过 rerankProvider 使用该名称。
+        name: ${RONGQI_VECTOR_RERANK_DASHSCOPE_NAME:dashscope}
+        # DashScope rerank 接口地址，通常保持默认即可。
+        url: ${RONGQI_VECTOR_RERANK_DASHSCOPE_URL:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+        # DashScope API Key，建议通过环境变量传入，不要写死在配置文件。
+        api-key: ${RONGQI_VECTOR_RERANK_DASHSCOPE_API_KEY:}
+        # DashScope rerank 模型名称。
+        model: ${RONGQI_VECTOR_RERANK_DASHSCOPE_MODEL:gte-rerank}
+      bge:
+        # 是否启用 BGE RerankProvider，适合对接本地或自托管 bge-reranker 服务。
+        enabled: ${RONGQI_VECTOR_RERANK_BGE_ENABLED:false}
+        # BGE RerankProvider 注册名称，请求里可通过 rerankProvider 使用该名称。
+        name: ${RONGQI_VECTOR_RERANK_BGE_NAME:bge}
+        # BGE rerank 服务地址，要求服务接受 query 和 documents 参数。
+        url: ${RONGQI_VECTOR_RERANK_BGE_URL:http://127.0.0.1:8000/rerank}
+        # BGE 服务密钥；本地无鉴权服务可以留空。
+        api-key: ${RONGQI_VECTOR_RERANK_BGE_API_KEY:}
+        # BGE rerank 模型名称。
+        model: ${RONGQI_VECTOR_RERANK_BGE_MODEL:bge-reranker-large}
     schema:
       # HTTP Collection schema 存储方式，支持 file 或 jdbc。
       type: ${RONGQI_VECTOR_SCHEMA_TYPE:file}

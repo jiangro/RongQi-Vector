@@ -10,33 +10,19 @@
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>vector-spring-boot-starter</artifactId>
-    <name>RongQi Vector Spring Boot Starter</name>
+    <artifactId>vector-rerank</artifactId>
+    <name>RongQi Vector Rerank</name>
 
     <dependencies>
         <dependency>
             <groupId>com.rongqi.vector</groupId>
-            <artifactId>vector-milvus</artifactId>
+            <artifactId>vector-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.rongqi.vector</groupId>
-            <artifactId>vector-embedding</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.rongqi.vector</groupId>
-            <artifactId>vector-rerank</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>${gson.version}</version>
         </dependency>
         <dependency>
             <groupId>junit</groupId>

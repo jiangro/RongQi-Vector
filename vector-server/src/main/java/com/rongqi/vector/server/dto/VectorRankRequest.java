@@ -9,7 +9,7 @@ import lombok.Setter;
 /**
  * HTTP 搜索二次排序请求。
  *
- * <p>调用方可以只传字段加权，也可以预留 profile / rerankProvider 给后续模型重排使用。</p>
+ * <p>调用方可以只传字段加权，也可以通过 rerankProvider / rerankTextField 启用模型重排。</p>
  */
 @Getter
 @Setter

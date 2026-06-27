@@ -16,6 +16,11 @@ import com.rongqi.vector.milvus.MilvusGenericTemplate;
 import com.rongqi.vector.milvus.MilvusVectorTemplate;
 import com.rongqi.vector.milvus.VectorCollectionDefinitionRegistry;
 import com.rongqi.vector.milvus.VectorCollectionDefinitionStore;
+import com.rongqi.vector.rerank.bge.BgeRerankProvider;
+import com.rongqi.vector.rerank.dashscope.DashScopeRerankProvider;
+import com.rongqi.vector.rerank.http.HttpRerankProperties;
+import com.rongqi.vector.core.rerank.RerankProvider;
+import com.rongqi.vector.core.rerank.RerankProviderRegistry;
 import java.nio.file.Paths;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
@@ -55,9 +60,29 @@ public class RongQiVectorAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public RerankProviderRegistry rerankProviderRegistry(RongQiVectorProperties properties,
+                                                        ObjectProvider<RerankProvider> providers) {
+        RerankProviderRegistry registry = new RerankProviderRegistry();
+        if (properties.getRerank().isEnabled()) {
+            if (properties.getRerank().getDashscope().isEnabled()) {
+                registry.register(new DashScopeRerankProvider(
+                        toHttpRerankProperties(properties.getRerank(), properties.getRerank().getDashscope())));
+            }
+            if (properties.getRerank().getBge().isEnabled()) {
+                registry.register(new BgeRerankProvider(
+                        toHttpRerankProperties(properties.getRerank(), properties.getRerank().getBge())));
+            }
+        }
+        providers.orderedStream().forEach(registry::register);
+        return registry;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public VectorTemplate vectorTemplate(RongQiVectorProperties properties,
                                          DomainMetadataParser metadataParser,
-                                         EmbeddingProviderRegistry embeddingProviderRegistry) {
+                                         EmbeddingProviderRegistry embeddingProviderRegistry,
+                                         RerankProviderRegistry rerankProviderRegistry) {
         MilvusClientProperties milvus = new MilvusClientProperties();
         milvus.setUri(properties.getMilvus().getUri());
         milvus.setToken(properties.getMilvus().getToken());
@@ -67,7 +92,9 @@ public class RongQiVectorAutoConfiguration {
                 metadataParser,
                 embeddingProviderRegistry,
                 properties.getEmbedding().getDefaultProvider(),
-                properties.getEmbedding().getBatchSize());
+                properties.getEmbedding().getBatchSize(),
+                rerankProviderRegistry,
+                properties.getRerank().getDefaultProvider());
     }
 
     @Bean
@@ -83,6 +110,7 @@ public class RongQiVectorAutoConfiguration {
     @ConditionalOnMissingBean
     public MilvusGenericTemplate milvusGenericTemplate(RongQiVectorProperties properties,
                                                        EmbeddingProviderRegistry embeddingProviderRegistry,
+                                                       RerankProviderRegistry rerankProviderRegistry,
                                                        VectorCollectionDefinitionRegistry definitionRegistry) {
         MilvusClientProperties milvus = new MilvusClientProperties();
         milvus.setUri(properties.getMilvus().getUri());
@@ -93,7 +121,9 @@ public class RongQiVectorAutoConfiguration {
                 embeddingProviderRegistry,
                 properties.getEmbedding().getDefaultProvider(),
                 definitionRegistry,
-                properties.getEmbedding().getBatchSize());
+                properties.getEmbedding().getBatchSize(),
+                rerankProviderRegistry,
+                properties.getRerank().getDefaultProvider());
     }
 
     private HttpEmbeddingProperties toHttpEmbeddingProperties(RongQiVectorProperties.HttpEmbedding source) {
@@ -106,6 +136,19 @@ public class RongQiVectorAutoConfiguration {
         target.setTimeoutMillis(source.getTimeoutMillis());
         target.setMaxRetries(source.getMaxRetries());
         target.setRetryIntervalMillis(source.getRetryIntervalMillis());
+        return target;
+    }
+
+    private HttpRerankProperties toHttpRerankProperties(RongQiVectorProperties.Rerank common,
+                                                        RongQiVectorProperties.HttpRerank source) {
+        HttpRerankProperties target = new HttpRerankProperties();
+        target.setName(source.getName());
+        target.setUrl(source.getUrl());
+        target.setApiKey(source.getApiKey());
+        target.setModel(source.getModel());
+        target.setTimeoutMillis(common.getTimeoutMillis());
+        target.setMaxRetries(common.getMaxRetries());
+        target.setRetryIntervalMillis(common.getRetryIntervalMillis());
         return target;
     }
 

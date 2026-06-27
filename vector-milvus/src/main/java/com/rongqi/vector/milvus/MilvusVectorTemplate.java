@@ -17,6 +17,8 @@ import com.rongqi.vector.core.metadata.EmbeddingFieldMetadata;
 import com.rongqi.vector.core.metadata.VectorCollectionMetadata;
 import com.rongqi.vector.core.metadata.VectorFieldMetadata;
 import com.rongqi.vector.core.rank.Ranker;
+import com.rongqi.vector.core.rerank.RerankProcessor;
+import com.rongqi.vector.core.rerank.RerankProviderRegistry;
 import com.rongqi.vector.embedding.EmbeddingOptions;
 import com.rongqi.vector.embedding.EmbeddingProvider;
 import com.rongqi.vector.embedding.EmbeddingProviderRegistry;
@@ -53,6 +55,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
     private final MilvusTypeMapper typeMapper;
     private final DomainEmbeddingBatchFiller embeddingBatchFiller;
     private final Ranker ranker;
+    private final RerankProcessor rerankProcessor;
 
     public MilvusVectorTemplate(MilvusClientProperties properties,
                                 DomainMetadataParser metadataParser,
@@ -81,6 +84,28 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
                                 EmbeddingProviderRegistry embeddingProviderRegistry,
                                 String defaultEmbeddingProvider,
                                 int embeddingBatchSize) {
+        this(properties, metadataParser, embeddingProviderRegistry, defaultEmbeddingProvider, embeddingBatchSize,
+                new RerankProviderRegistry(), null);
+    }
+
+    /**
+     * 创建支持 rerank 的 Milvus VectorTemplate。
+     *
+     * @param properties Milvus 连接配置
+     * @param metadataParser domain 注解解析器
+     * @param embeddingProviderRegistry EmbeddingProvider 注册表
+     * @param defaultEmbeddingProvider 默认 EmbeddingProvider 名称
+     * @param embeddingBatchSize 每次批量生成 embedding 的文本数量
+     * @param rerankProviderRegistry RerankProvider 注册表
+     * @param defaultRerankProvider 默认 RerankProvider 名称
+     */
+    public MilvusVectorTemplate(MilvusClientProperties properties,
+                                DomainMetadataParser metadataParser,
+                                EmbeddingProviderRegistry embeddingProviderRegistry,
+                                String defaultEmbeddingProvider,
+                                int embeddingBatchSize,
+                                RerankProviderRegistry rerankProviderRegistry,
+                                String defaultRerankProvider) {
         this.properties = properties;
         this.metadataParser = metadataParser;
         this.embeddingProviderRegistry = embeddingProviderRegistry;
@@ -94,6 +119,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         this.entityMapper = new MilvusEntityMapper(accessor);
         this.filterExpressionBuilder = new FilterExpressionBuilder(accessor);
         this.ranker = new Ranker();
+        this.rerankProcessor = new RerankProcessor(rerankProviderRegistry, defaultRerankProvider);
         this.embeddingBatchFiller = new DomainEmbeddingBatchFiller(
                 accessor,
                 embeddingProviderRegistry,
@@ -153,11 +179,16 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
                 .build();
         List<Float> vector = provider.embed(Collections.singletonList(query), embeddingOptions).get(0);
         validateVectorDimension(vectorField, vector);
-        return searchByVector(domainType, vector, filter, options);
+        return searchByVector(domainType, vector, filter, options, query);
     }
 
     @Override
     public <T> SearchResult<T> searchByVector(Class<T> domainType, List<Float> vector, T filter, SearchOptions options) {
+        return searchByVector(domainType, vector, filter, options, null);
+    }
+
+    private <T> SearchResult<T> searchByVector(Class<T> domainType, List<Float> vector, T filter,
+                                               SearchOptions options, String query) {
         VectorCollectionMetadata metadata = metadataParser.parse(domainType);
         collectionManager.ensureCollection(metadata);
         VectorFieldMetadata vectorField = resolveDefaultVectorField(metadata);
@@ -190,7 +221,10 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
             T entity = entityMapper.toEntity(metadata, values, result.getId());
             hits.add(new SearchHit<>(result.getScore(), entity));
         }
-        return new SearchResult<>(ranker.rank(hits, actualOptions));
+        if (query == null) {
+            return new SearchResult<>(ranker.rank(hits, actualOptions));
+        }
+        return new SearchResult<>(rerankProcessor.rank(query, hits, actualOptions));
     }
 
     @Override

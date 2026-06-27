@@ -467,6 +467,90 @@ rankScore = score
 
 注意：目前 `fieldBoost` 读取的是结果实体的一层字段。如果你的分数字段放在 `metadata.quality_score` 这种嵌套对象里，建议入库时额外平铺为 `quality_score`，或者在 domain 中定义对应字段，否则加权规则读不到该值。
 
+#### 使用 Rerank 模型重排
+
+如果只靠向量分数仍然容易把“语义相近但不能直接回答问题”的内容排在前面，可以启用 rerank。Rerank 会先让 Milvus 召回 `candidateTopK` 条候选，再把候选正文和用户 query 交给 rerank 模型重新打分，最后返回 `topK` 条。
+
+`application.yml` 中先启用一个 provider。DashScope 适合已经使用阿里云生态的项目：
+
+```yaml
+rongqi:
+  vector:
+    rerank:
+      enabled: true
+      default-provider: dashscope
+      dashscope:
+        enabled: true
+        api-key: ${DASHSCOPE_API_KEY}
+        model: gte-rerank
+```
+
+如果你有本地或内网的 BGE reranker 服务，可以启用 BGE：
+
+```yaml
+rongqi:
+  vector:
+    rerank:
+      enabled: true
+      default-provider: bge
+      bge:
+        enabled: true
+        url: http://127.0.0.1:8000/rerank
+        model: bge-reranker-large
+```
+
+Java 调用示例：
+
+```java
+SearchResult<KnowledgeChunk> result = vectorTemplate.search(
+        KnowledgeChunk.class,
+        "如何申请发票",
+        filter,
+        SearchOptions.builder()
+                .topK(10)
+                .candidateTopK(50)
+                .rank(RankOptions.builder()
+                        .rerankTextField("content")
+                        .build())
+                .outputFields("chunk_id", "title", "content")
+                .build()
+);
+```
+
+如果不想使用配置里的默认 provider，也可以在请求里指定：
+
+```java
+.rank(RankOptions.builder()
+        .rerankProvider("bge")
+        .rerankModel("bge-reranker-large")
+        .rerankTextField("content")
+        .build())
+```
+
+HTTP collection 模式示例：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 10,
+  "candidateTopK": 50,
+  "rank": {
+    "rerankProvider": "bge",
+    "rerankModel": "bge-reranker-large",
+    "rerankTextField": "content"
+  },
+  "outputFields": ["chunk_id", "title", "content"]
+}
+```
+
+几个规则需要注意：
+
+- `rerankTextField` 是传给 rerank 模型的正文文本字段，必须能从搜索结果里读到；HTTP collection 模式一般要把它加入 `outputFields`。
+- `rank.rerankProvider` 不填时使用 `rongqi.vector.rerank.default-provider`。
+- 只有文本搜索 `query` 会启用 rerank；直接传 `vector` 的搜索没有原始 query，不会调用 rerank 模型。
+- 可以同时使用 `fieldBoost` 和 rerank。框架会先按模型分数重排，再叠加字段加权，最终分数写入 `rankScore`。
+
 复杂过滤条件建议写在 `SearchOptions` 中。`filter` 对象仍然兼容旧用法，只适合表达“字段等于某个值”；`SearchOptions` 支持大于、小于、列表包含、列表排除和模糊匹配。
 
 ```java
@@ -1061,10 +1145,13 @@ Content-Type: application/json
 | `candidateTopK` | number | 否 | 等于 `topK` | 第一阶段向量召回候选数量，启用二次排序时建议大于 `topK` |
 | `minScore` | number | 否 | 无 | 最低分数，小于该分数的结果会被过滤 |
 | `outputFields` | array | 否 | schema 默认输出字段 | 指定返回字段；为空时返回 `output=true` 的字段 |
-| `rank` | object | 否 | 无 | 二次排序配置，目前支持字段加权 |
+| `rank` | object | 否 | 无 | 二次排序配置，支持字段加权和 rerank 模型重排 |
 | `rank.fieldBoosts` | array | 否 | 空数组 | 字段加权列表，计算公式为 `rankScore = score + 字段值 * weight` |
 | `rank.fieldBoosts[].field` | string | 是 | 无 | 参与排序的字段名，HTTP collection 模式使用 schema 字段名，domain 模式使用 Java 字段名 |
 | `rank.fieldBoosts[].weight` | number | 是 | 无 | 字段权重，正数提高排名，负数降低排名 |
+| `rank.rerankProvider` | string | 否 | `rongqi.vector.rerank.default-provider` | 本次搜索使用的 RerankProvider 名称，例如 `dashscope` 或 `bge` |
+| `rank.rerankModel` | string | 否 | provider 配置的默认模型 | 本次搜索覆盖使用的 rerank 模型名称 |
+| `rank.rerankTextField` | string | 启用 rerank 时建议填写 | `text` | 传给 rerank 模型的正文文本字段，必须包含在返回结果中 |
 
 | 模式 | `filterObject` / `filters.field` 字段名怎么写 | 示例 |
 | --- | --- | --- |
