@@ -10,9 +10,11 @@ import com.rongqi.vector.core.UpsertResult;
 import com.rongqi.vector.core.VectorErrorCode;
 import com.rongqi.vector.core.VectorException;
 import com.rongqi.vector.core.VectorTemplate;
+import com.rongqi.vector.core.rank.RankOptions;
 import com.rongqi.vector.milvus.MilvusGenericTemplate;
 import com.rongqi.vector.server.dto.ApiResponse;
 import com.rongqi.vector.server.dto.VectorDeleteRequest;
+import com.rongqi.vector.server.dto.VectorRankRequest;
 import com.rongqi.vector.server.dto.VectorSearchHitResponse;
 import com.rongqi.vector.server.dto.VectorSearchRequest;
 import com.rongqi.vector.server.dto.VectorSearchResponse;
@@ -92,7 +94,7 @@ public class VectorDocumentController {
         }
         List<VectorSearchHitResponse> hits = new ArrayList<>();
         for (SearchHit<?> hit : result.getHits()) {
-            hits.add(new VectorSearchHitResponse(hit.getScore(), hit.getEntity()));
+            hits.add(new VectorSearchHitResponse(hit.getScore(), hit.getRankScore(), hit.getEntity()));
         }
         return ApiResponse.success(new VectorSearchResponse(hits));
     }
@@ -146,7 +148,7 @@ public class VectorDocumentController {
         }
         List<VectorSearchHitResponse> hits = new ArrayList<>();
         for (SearchHit<Map<String, Object>> hit : result.getHits()) {
-            hits.add(new VectorSearchHitResponse(hit.getScore(), hit.getEntity()));
+            hits.add(new VectorSearchHitResponse(hit.getScore(), hit.getRankScore(), hit.getEntity()));
         }
         return ApiResponse.success(new VectorSearchResponse(hits));
     }
@@ -186,6 +188,9 @@ public class VectorDocumentController {
         SearchOptions.Builder builder = SearchOptions.builder()
                 .topK(request.getTopK() == null ? 10 : request.getTopK())
                 .minScore(request.getMinScore());
+        if (request.getCandidateTopK() != null) {
+            builder.candidateTopK(request.getCandidateTopK());
+        }
         if (request.getOutputFields() != null) {
             for (String outputField : request.getOutputFields()) {
                 builder.outputFields(outputField);
@@ -195,6 +200,25 @@ public class VectorDocumentController {
             request.getFilters().stream()
                     .filter(filter -> filter != null)
                     .forEach(filter -> builder.filter(filter.getField(), filter.getOperator(), filter.getValue()));
+        }
+        if (request.getRank() != null) {
+            builder.rank(toRankOptions(request.getRank()));
+        }
+        return builder.build();
+    }
+
+    private RankOptions toRankOptions(VectorRankRequest request) {
+        RankOptions.Builder builder = RankOptions.builder()
+                .profile(request.getProfile())
+                .rerankProvider(request.getRerankProvider())
+                .rerankModel(request.getRerankModel())
+                .rerankTextField(request.getRerankTextField());
+        if (request.getFieldBoosts() != null) {
+            for (VectorRankRequest.FieldBoostRequest fieldBoost : request.getFieldBoosts()) {
+                if (fieldBoost != null) {
+                    builder.fieldBoost(fieldBoost.getField(), fieldBoost.getWeight());
+                }
+            }
         }
         return builder.build();
     }

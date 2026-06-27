@@ -1,5 +1,6 @@
 package com.rongqi.vector.core;
 
+import com.rongqi.vector.core.rank.RankOptions;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,17 +14,21 @@ import java.util.Map;
  */
 public class SearchOptions {
     private final int topK;
+    private final int candidateTopK;
     private final Double minScore;
     private final List<String> outputFields;
     private final List<FilterCondition> filterConditions;
     private final Map<String, Object> searchParams;
+    private final RankOptions rankOptions;
 
     private SearchOptions(Builder builder) {
         this.topK = builder.topK;
+        this.candidateTopK = Math.max(builder.candidateTopK, builder.topK);
         this.minScore = builder.minScore;
         this.outputFields = Collections.unmodifiableList(new ArrayList<>(builder.outputFields));
         this.filterConditions = Collections.unmodifiableList(new ArrayList<>(builder.filterConditions));
         this.searchParams = Collections.unmodifiableMap(new LinkedHashMap<>(builder.searchParams));
+        this.rankOptions = builder.rankOptions;
     }
 
     public static SearchOptions topK(int topK) {
@@ -36,6 +41,15 @@ public class SearchOptions {
 
     public int getTopK() {
         return topK;
+    }
+
+    /**
+     * 返回第一阶段向量召回候选数量。
+     *
+     * <p>未启用 rank/rerank 时通常等于 topK；启用二次排序时可以设置得更大，让排序有更多候选。</p>
+     */
+    public int getCandidateTopK() {
+        return candidateTopK;
     }
 
     public Double getMinScore() {
@@ -58,17 +72,36 @@ public class SearchOptions {
     }
 
     /**
+     * 返回二次排序配置，空表示不启用 rank/rerank。
+     */
+    public RankOptions getRankOptions() {
+        return rankOptions;
+    }
+
+    /**
      * SearchOptions 构建器，避免构造方法参数过多。
      */
     public static class Builder {
         private int topK = 10;
+        private int candidateTopK = 10;
         private Double minScore;
         private final List<String> outputFields = new ArrayList<>();
         private final List<FilterCondition> filterConditions = new ArrayList<>();
         private final Map<String, Object> searchParams = new LinkedHashMap<>();
+        private RankOptions rankOptions;
 
         public Builder topK(int topK) {
             this.topK = Math.max(1, topK);
+            return this;
+        }
+
+        /**
+         * 设置第一阶段向量召回候选数量。
+         *
+         * <p>该值小于 topK 时会自动提升到 topK，避免最终结果数量不足。</p>
+         */
+        public Builder candidateTopK(int candidateTopK) {
+            this.candidateTopK = Math.max(1, candidateTopK);
             return this;
         }
 
@@ -159,6 +192,14 @@ public class SearchOptions {
 
         public Builder searchParam(String key, Object value) {
             this.searchParams.put(key, value);
+            return this;
+        }
+
+        /**
+         * 设置搜索结果二次排序配置。
+         */
+        public Builder rank(RankOptions rankOptions) {
+            this.rankOptions = rankOptions;
             return this;
         }
 

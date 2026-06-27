@@ -38,7 +38,10 @@ RongQi Vector 的目标是：
 | `Index` / 索引 | 给向量字段建立的检索结构。没有索引时，大数据量搜索会很慢。 | `HNSW`、`AUTOINDEX` |
 | `MetricType` / 距离算法 | 判断两个向量是否相似的计算方式。不同模型和业务可能使用不同算法。 | `COSINE`、`IP`、`L2` |
 | `TopK` | 搜索时最多返回多少条最相似的数据。 | `topK: 10` |
+| `CandidateTopK` | 第一阶段先从 Milvus 召回多少条候选结果，通常用于给二次排序更多候选。 | `candidateTopK: 50` |
 | `Score` / 相似度分数 | 搜索结果的相似程度。通常用于排序或过滤低质量结果。 | `minScore: 0.7` |
+| `Rank` / 二次排序 | 在向量相似度之外，再叠加业务字段权重调整结果顺序。 | `priority * 0.2` |
+| `RankScore` | 二次排序后的分数。`score` 仍然保留 Milvus 原始相似度分数。 | `rankScore: 2.8` |
 | `Filter` / 过滤条件 | 在向量搜索外，再按字段筛选数据。比如只查某个租户、某个业务类型。 | `tenant_id == 1001` |
 | `LIKE` / 模糊匹配 | 字符串包含匹配。本项目会自动帮你补 `%`，用户只传关键词即可。 | 传入 `发票` 会变成 `%发票%` |
 | `OutputFields` | 搜索结果需要返回哪些字段。只返回必要字段可以减少响应体大小。 | `chunk_id`、`title`、`content` |
@@ -351,6 +354,28 @@ SearchResult<KnowledgeChunk> result = vectorTemplate.search(
                 .build()
 );
 ```
+
+如果希望在向量相似度之外叠加业务排序，可以使用 `candidateTopK` 和 `RankOptions`。例如先从 Milvus 召回 50 条候选，再根据 `priority` 字段加权排序，最终返回 10 条：
+
+```java
+import com.rongqi.vector.core.rank.RankOptions;
+
+SearchResult<KnowledgeChunk> result = vectorTemplate.search(
+        KnowledgeChunk.class,
+        "如何申请发票",
+        filter,
+        SearchOptions.builder()
+                .topK(10)
+                .candidateTopK(50)
+                .rank(RankOptions.builder()
+                        .fieldBoost("priority", 0.2)
+                        .build())
+                .outputFields("chunk_id", "tenant_id", "title", "content", "priority")
+                .build()
+);
+```
+
+排序公式为 `rankScore = score + 字段值 * 权重`。`score` 仍然表示 Milvus 原始相似度分数，`rankScore` 表示二次排序后的分数。字段加权目前只处理数字字段；字段缺失或不是数字时会自动忽略。参与排序的字段需要在结果实体中可读取，HTTP collection 模式建议把该字段加入 `outputFields`。
 
 复杂过滤条件建议写在 `SearchOptions` 中。`filter` 对象仍然兼容旧用法，只适合表达“字段等于某个值”；`SearchOptions` 支持大于、小于、列表包含、列表排除和模糊匹配。
 
@@ -840,6 +865,25 @@ Content-Type: application/json
 }
 ```
 
+### 带业务排序搜索示例
+
+下面示例表示先召回 50 条候选，再按 `score + priority * 0.2` 重新排序，最终返回前 10 条：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 10,
+  "candidateTopK": 50,
+  "rank": {
+    "fieldBoosts": [
+      { "field": "priority", "weight": 0.2 }
+    ]
+  },
+  "outputFields": ["chunk_id", "tenant_id", "title", "content", "priority"]
+}
+```
+
 ### 复杂过滤搜索示例
 
 `filterObject` 适合简单等值过滤；需要大于、小于、列表包含、列表排除或模糊匹配时，使用 `filters`。
@@ -886,8 +930,13 @@ Content-Type: application/json
 | `filterObject` | object | 否 | 空对象 | 过滤条件，只会使用非空字段，例如只搜索 `tenant_id=1001` 的数据 |
 | `filters` | array | 否 | 空数组 | 复杂过滤条件，支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE` |
 | `topK` | number | 否 | `10` | 返回最相似的前 N 条 |
+| `candidateTopK` | number | 否 | 等于 `topK` | 第一阶段向量召回候选数量，启用二次排序时建议大于 `topK` |
 | `minScore` | number | 否 | 无 | 最低分数，小于该分数的结果会被过滤 |
 | `outputFields` | array | 否 | schema 默认输出字段 | 指定返回字段；为空时返回 `output=true` 的字段 |
+| `rank` | object | 否 | 无 | 二次排序配置，目前支持字段加权 |
+| `rank.fieldBoosts` | array | 否 | 空数组 | 字段加权列表，计算公式为 `rankScore = score + 字段值 * weight` |
+| `rank.fieldBoosts[].field` | string | 是 | 无 | 参与排序的字段名，HTTP collection 模式使用 schema 字段名，domain 模式使用 Java 字段名 |
+| `rank.fieldBoosts[].weight` | number | 是 | 无 | 字段权重，正数提高排名，负数降低排名 |
 
 | 模式 | `filterObject` / `filters.field` 字段名怎么写 | 示例 |
 | --- | --- | --- |

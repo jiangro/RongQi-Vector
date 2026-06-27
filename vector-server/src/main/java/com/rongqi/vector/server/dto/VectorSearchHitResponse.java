@@ -11,10 +11,16 @@ import lombok.Getter;
 @Getter
 public class VectorSearchHitResponse {
     private final double score;
+    private final Double rankScore;
     private final Object entity;
 
     public VectorSearchHitResponse(double score, Object entity) {
+        this(score, null, entity);
+    }
+
+    public VectorSearchHitResponse(double score, Double rankScore, Object entity) {
         this.score = score;
+        this.rankScore = rankScore;
         this.entity = entity;
     }
 
@@ -22,6 +28,7 @@ public class VectorSearchHitResponse {
     public String toString() {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("score", score);
+        summary.put("rankScore", rankScore);
         summary.put("entityType", entity == null ? null : entity.getClass().getName());
         return JsonToString.toJson(summary);
     }

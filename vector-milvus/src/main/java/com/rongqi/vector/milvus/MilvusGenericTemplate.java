@@ -15,6 +15,7 @@ import com.rongqi.vector.core.VectorException;
 import com.rongqi.vector.core.schema.VectorCollectionDefinition;
 import com.rongqi.vector.core.schema.VectorEmbeddingDefinition;
 import com.rongqi.vector.core.schema.VectorFieldDefinition;
+import com.rongqi.vector.core.rank.Ranker;
 import com.rongqi.vector.embedding.EmbeddingOptions;
 import com.rongqi.vector.embedding.EmbeddingProvider;
 import com.rongqi.vector.embedding.EmbeddingProviderRegistry;
@@ -45,6 +46,7 @@ public class MilvusGenericTemplate {
     private final MilvusTypeMapper typeMapper;
     private final GenericEmbeddingBatchFiller embeddingBatchFiller;
     private final MilvusFilterExpressionFormatter filterFormatter;
+    private final Ranker ranker;
 
     public MilvusGenericTemplate(MilvusClientProperties properties,
                                  EmbeddingProviderRegistry embeddingProviderRegistry,
@@ -76,6 +78,7 @@ public class MilvusGenericTemplate {
         this.collectionManager = new MilvusCollectionManager(clientFactory, typeMapper);
         this.definitionRegistry = definitionRegistry;
         this.filterFormatter = new MilvusFilterExpressionFormatter();
+        this.ranker = new Ranker();
         this.embeddingBatchFiller = new GenericEmbeddingBatchFiller(
                 embeddingProviderRegistry,
                 this.defaultEmbeddingProvider,
@@ -151,7 +154,7 @@ public class MilvusGenericTemplate {
                 .data(Collections.singletonList(new FloatVec(vector)))
                 .annsField(vectorField.getName())
                 .metricType(typeMapper.toMilvusMetricType(vectorField.getMetricType()))
-                .topK(Math.max(1, actualOptions.getTopK()))
+                .topK(Math.max(1, actualOptions.getCandidateTopK()))
                 .searchParams(resolveSearchParams(actualOptions))
                 .outputFields(resolveOutputFields(definition, actualOptions));
         String filter = buildFilter(definition, filterObject, actualOptions.getFilterConditions());
@@ -172,7 +175,7 @@ public class MilvusGenericTemplate {
             entity.putIfAbsent(idField.getName(), result.getId());
             hits.add(new SearchHit<>(result.getScore(), entity));
         }
-        return new SearchResult<>(hits);
+        return new SearchResult<>(ranker.rank(hits, actualOptions));
     }
 
     /**
@@ -343,7 +346,7 @@ public class MilvusGenericTemplate {
 
     private Map<String, Object> resolveSearchParams(SearchOptions options) {
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("ef", Math.max(64, options.getTopK() * 2));
+        params.put("ef", Math.max(64, options.getCandidateTopK() * 2));
         params.putAll(options.getSearchParams());
         return params;
     }

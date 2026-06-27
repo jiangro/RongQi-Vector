@@ -26,9 +26,11 @@ public class VectorSearchRequest {
     private List<Float> vector;
     private Map<String, Object> filterObject = new LinkedHashMap<>();
     private Integer topK;
+    private Integer candidateTopK;
     private Double minScore;
     private List<String> outputFields = new ArrayList<>();
     private List<FilterCondition> filters = new ArrayList<>();
+    private VectorRankRequest rank;
 
     @Override
     public String toString() {
@@ -39,9 +41,11 @@ public class VectorSearchRequest {
         summary.put("vectorSize", vector == null ? 0 : vector.size());
         summary.put("filterFieldCount", filterObject == null ? 0 : filterObject.size());
         summary.put("topK", topK);
+        summary.put("candidateTopK", candidateTopK);
         summary.put("minScore", minScore);
         summary.put("outputFields", outputFields);
         summary.put("filterConditionCount", filters == null ? 0 : filters.size());
+        summary.put("rankEnabled", rank != null);
         return JsonToString.toJson(summary);
     }
 }

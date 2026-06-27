@@ -16,6 +16,7 @@ import com.rongqi.vector.core.metadata.DomainMetadataParser;
 import com.rongqi.vector.core.metadata.EmbeddingFieldMetadata;
 import com.rongqi.vector.core.metadata.VectorCollectionMetadata;
 import com.rongqi.vector.core.metadata.VectorFieldMetadata;
+import com.rongqi.vector.core.rank.Ranker;
 import com.rongqi.vector.embedding.EmbeddingOptions;
 import com.rongqi.vector.embedding.EmbeddingProvider;
 import com.rongqi.vector.embedding.EmbeddingProviderRegistry;
@@ -51,6 +52,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
     private final FilterExpressionBuilder filterExpressionBuilder;
     private final MilvusTypeMapper typeMapper;
     private final DomainEmbeddingBatchFiller embeddingBatchFiller;
+    private final Ranker ranker;
 
     public MilvusVectorTemplate(MilvusClientProperties properties,
                                 DomainMetadataParser metadataParser,
@@ -91,6 +93,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         this.accessor = new DomainValueAccessor();
         this.entityMapper = new MilvusEntityMapper(accessor);
         this.filterExpressionBuilder = new FilterExpressionBuilder(accessor);
+        this.ranker = new Ranker();
         this.embeddingBatchFiller = new DomainEmbeddingBatchFiller(
                 accessor,
                 embeddingProviderRegistry,
@@ -167,7 +170,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
                 .data(Collections.singletonList(new FloatVec(vector)))
                 .annsField(vectorField.getVectorName())
                 .metricType(typeMapper.toMilvusMetricType(vectorField.getMetricType()))
-                .topK(Math.max(1, actualOptions.getTopK()))
+                .topK(Math.max(1, actualOptions.getCandidateTopK()))
                 .searchParams(resolveSearchParams(actualOptions))
                 .outputFields(resolveOutputFields(metadata, actualOptions));
         if (filterExpression != null && !filterExpression.trim().isEmpty()) {
@@ -187,7 +190,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
             T entity = entityMapper.toEntity(metadata, values, result.getId());
             hits.add(new SearchHit<>(result.getScore(), entity));
         }
-        return new SearchResult<>(hits);
+        return new SearchResult<>(ranker.rank(hits, actualOptions));
     }
 
     @Override
@@ -313,7 +316,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
 
     private Map<String, Object> resolveSearchParams(SearchOptions options) {
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("ef", Math.max(64, options.getTopK() * 2));
+        params.put("ef", Math.max(64, options.getCandidateTopK() * 2));
         params.putAll(options.getSearchParams());
         return params;
     }
