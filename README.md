@@ -377,6 +377,96 @@ SearchResult<KnowledgeChunk> result = vectorTemplate.search(
 
 排序公式为 `rankScore = score + 字段值 * 权重`。`score` 仍然表示 Milvus 原始相似度分数，`rankScore` 表示二次排序后的分数。字段加权目前只处理数字字段；字段缺失或不是数字时会自动忽略。参与排序的字段需要在结果实体中可读取，HTTP collection 模式建议把该字段加入 `outputFields`。
 
+#### fieldBoost 字段怎么选
+
+`fieldBoost` 适合放“数值越大越应该排前面”的业务分数字段，不适合直接放纯编号字段。
+
+| 字段类型 | 是否建议用于 fieldBoost | 原因 |
+| --- | --- | --- |
+| `priority`、`qualityScore`、`hotScore` | 建议 | 这些字段本身表达优先级、质量或热度，数值大小有排序含义 |
+| `contentTypeWeight`、`sourceWeight` | 建议 | 可以表达正文、FAQ、公告、草稿、归档内容等来源或内容类型权重 |
+| `isArchived`、`isDraft`、`isDeprecated` | 可以，但通常配负权重 | 可以降低归档、草稿、过期内容的排名 |
+| `tenantId`、`bizId`、`docId`、`pageIndex` | 不建议 | 这些只是编号，数字大小不代表内容更相关，直接加权容易把排序带偏 |
+| `createdAt`、`updatedAt` | 谨慎使用 | 时间戳数值很大，直接加权会压过向量分数；建议先转换成较小的 `freshnessScore` |
+
+以知识库 FAQ 检索为例，如果希望“已审核、质量高、推荐展示”的内容排在更前面，可以在入库前给 chunk 增加一些稳定的业务分数字段：
+
+```json
+{
+  "chunk_id": "faq_001_chunk_001",
+  "title": "发票申请说明",
+  "content": "登录系统后进入订单页面，选择需要开票的订单并提交发票信息。",
+  "priority": 5,
+  "quality_score": 0.9,
+  "content_type_weight": 0.3,
+  "is_archived": 0
+}
+```
+
+然后搜索时这样加权：
+
+```java
+SearchResult<KnowledgeChunk> result = vectorTemplate.search(
+        KnowledgeChunk.class,
+        "如何申请发票",
+        filter,
+        SearchOptions.builder()
+                .topK(10)
+                .candidateTopK(50)
+                .rank(RankOptions.builder()
+                        .fieldBoost("priority", 0.05)
+                        .fieldBoost("qualityScore", 0.4)
+                        .fieldBoost("contentTypeWeight", 0.3)
+                        .fieldBoost("isArchived", -0.5)
+                        .build())
+                .outputFields("chunk_id", "title", "content", "priority",
+                        "quality_score", "content_type_weight", "is_archived")
+                .build()
+);
+```
+
+HTTP collection 模式字段名使用 schema 字段名：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 10,
+  "candidateTopK": 50,
+  "rank": {
+    "fieldBoosts": [
+      { "field": "priority", "weight": 0.05 },
+      { "field": "quality_score", "weight": 0.4 },
+      { "field": "content_type_weight", "weight": 0.3 },
+      { "field": "is_archived", "weight": -0.5 }
+    ]
+  },
+  "outputFields": [
+    "chunk_id",
+    "title",
+    "content",
+    "priority",
+    "quality_score",
+    "content_type_weight",
+    "is_archived"
+  ]
+}
+```
+
+上面的公式大致是：
+
+```text
+rankScore = score
+          + priority * 0.05
+          + quality_score * 0.4
+          + content_type_weight * 0.3
+          + is_archived * -0.5
+```
+
+这样高质量、优先级高、来源可靠的内容会更容易排到前面；归档或过期内容会因为 `is_archived` 被降低排名。
+
+注意：目前 `fieldBoost` 读取的是结果实体的一层字段。如果你的分数字段放在 `metadata.quality_score` 这种嵌套对象里，建议入库时额外平铺为 `quality_score`，或者在 domain 中定义对应字段，否则加权规则读不到该值。
+
 复杂过滤条件建议写在 `SearchOptions` 中。`filter` 对象仍然兼容旧用法，只适合表达“字段等于某个值”；`SearchOptions` 支持大于、小于、列表包含、列表排除和模糊匹配。
 
 ```java
@@ -883,6 +973,44 @@ Content-Type: application/json
   "outputFields": ["chunk_id", "tenant_id", "title", "content", "priority"]
 }
 ```
+
+如果是知识库或 FAQ 场景，更推荐使用稳定的业务分数字段，而不是使用 `tenant_id`、`biz_id`、`doc_id`、`page_index` 这类编号字段：
+
+```json
+{
+  "collection": "knowledge_chunk_v1",
+  "query": "如何申请发票",
+  "topK": 10,
+  "candidateTopK": 50,
+  "rank": {
+    "fieldBoosts": [
+      { "field": "priority", "weight": 0.05 },
+      { "field": "quality_score", "weight": 0.4 },
+      { "field": "content_type_weight", "weight": 0.3 },
+      { "field": "is_archived", "weight": -0.5 }
+    ]
+  },
+  "outputFields": [
+    "chunk_id",
+    "title",
+    "content",
+    "priority",
+    "quality_score",
+    "content_type_weight",
+    "is_archived"
+  ]
+}
+```
+
+字段选择建议：
+
+| 字段 | 作用 | 建议权重 |
+| --- | --- | --- |
+| `priority` | 人工或业务配置的优先级 | 小正权重 |
+| `quality_score` | 内容质量分，例如审核通过、答案完整度、人工评分 | 正权重 |
+| `content_type_weight` | 内容类型权重，例如 FAQ、公告、操作手册、草稿 | 按业务设置 |
+| `is_archived` | 是否归档或过期 | 通常负权重 |
+| `freshness_score` | 新鲜度分，建议把时间转换成 0 到 1 之间的小分数 | 正权重 |
 
 ### 复杂过滤搜索示例
 
