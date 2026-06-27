@@ -52,6 +52,10 @@ public class VectorDocumentController {
      */
     @PostMapping("/documents/upsert")
     public ApiResponse<VectorWriteResponse> upsert(@RequestBody VectorUpsertRequest request) {
+        validateTarget(request.getDomain(), request.getCollection());
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID, "items 不能为空");
+        }
         if (hasText(request.getCollection())) {
             UpsertResult result = genericTemplate.upsert(request.getCollection(), request.getItems());
             return ApiResponse.success(new VectorWriteResponse(result.getCount()));
@@ -70,6 +74,8 @@ public class VectorDocumentController {
      */
     @PostMapping("/search")
     public ApiResponse<VectorSearchResponse> search(@RequestBody VectorSearchRequest request) {
+        validateTarget(request.getDomain(), request.getCollection());
+        validateQueryOrVector(request);
         if (hasText(request.getCollection())) {
             return searchByCollection(request);
         }
@@ -96,6 +102,8 @@ public class VectorDocumentController {
      */
     @PostMapping("/documents/delete")
     public ApiResponse<VectorWriteResponse> delete(@RequestBody VectorDeleteRequest request) {
+        validateTarget(request.getDomain(), request.getCollection());
+        validateDeleteCondition(request);
         if (hasText(request.getCollection())) {
             DeleteResult result = genericTemplate.delete(
                     request.getCollection(),
@@ -112,11 +120,6 @@ public class VectorDocumentController {
                 count += result.getCount();
             }
             return ApiResponse.success(new VectorWriteResponse(count));
-        }
-        if ((request.getFilterObject() == null || request.getFilterObject().isEmpty())
-                && (request.getFilters() == null || request.getFilters().isEmpty())) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    "删除请求必须提供 ids、filterObject 或 filters");
         }
         Object filter = request.getFilterObject() == null || request.getFilterObject().isEmpty()
                 ? null
@@ -204,6 +207,43 @@ public class VectorDocumentController {
                     .forEach(filter -> builder.filter(filter.getField(), filter.getOperator(), filter.getValue()));
         }
         return builder.build();
+    }
+
+    /**
+     * 校验 domain 和 collection 只能选择一种调用模式。
+     */
+    private void validateTarget(String domain, String collection) {
+        boolean hasDomain = hasText(domain);
+        boolean hasCollection = hasText(collection);
+        if (hasDomain == hasCollection) {
+            throw new VectorException(VectorErrorCode.VECTOR_DOMAIN_INVALID,
+                    "domain 和 collection 必须二选一，不能都为空或同时传入");
+        }
+    }
+
+    /**
+     * 校验搜索请求必须且只能提供 query 或 vector。
+     */
+    private void validateQueryOrVector(VectorSearchRequest request) {
+        boolean hasQuery = hasText(request.getQuery());
+        boolean hasVector = request.getVector() != null && !request.getVector().isEmpty();
+        if (hasQuery == hasVector) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    "query 和 vector 必须二选一，不能都为空或同时传入");
+        }
+    }
+
+    /**
+     * 校验删除请求至少提供一种删除条件，避免误删整个 Collection。
+     */
+    private void validateDeleteCondition(VectorDeleteRequest request) {
+        boolean hasIds = request.getIds() != null && !request.getIds().isEmpty();
+        boolean hasFilterObject = request.getFilterObject() != null && !request.getFilterObject().isEmpty();
+        boolean hasFilters = request.getFilters() != null && !request.getFilters().isEmpty();
+        if (!hasIds && !hasFilterObject && !hasFilters) {
+            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
+                    "删除请求必须提供 ids、filterObject 或 filters");
+        }
     }
 
     private Class<?> resolveDomainType(String domainClassName) {

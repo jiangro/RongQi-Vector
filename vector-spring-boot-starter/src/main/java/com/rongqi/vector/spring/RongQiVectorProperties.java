@@ -69,6 +69,7 @@ public class RongQiVectorProperties {
      */
     public static class Embedding {
         private String defaultProvider = "noop";
+        private int batchSize = 32;
 
         public String getDefaultProvider() {
             return defaultProvider;
@@ -76,6 +77,19 @@ public class RongQiVectorProperties {
 
         public void setDefaultProvider(String defaultProvider) {
             this.defaultProvider = defaultProvider;
+        }
+
+        public int getBatchSize() {
+            return batchSize <= 0 ? 32 : batchSize;
+        }
+
+        /**
+         * 设置批量 Embedding 的分批大小。
+         *
+         * <p>该值控制一次调用 EmbeddingProvider 时最多传入多少条文本，默认 32。</p>
+         */
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
         }
     }
 

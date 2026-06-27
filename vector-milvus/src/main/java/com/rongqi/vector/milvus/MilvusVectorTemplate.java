@@ -50,6 +50,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
     private final MilvusEntityMapper entityMapper;
     private final FilterExpressionBuilder filterExpressionBuilder;
     private final MilvusTypeMapper typeMapper;
+    private final DomainEmbeddingBatchFiller embeddingBatchFiller;
 
     public MilvusVectorTemplate(MilvusClientProperties properties,
                                 DomainMetadataParser metadataParser,
@@ -61,6 +62,23 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
                                 DomainMetadataParser metadataParser,
                                 EmbeddingProviderRegistry embeddingProviderRegistry,
                                 String defaultEmbeddingProvider) {
+        this(properties, metadataParser, embeddingProviderRegistry, defaultEmbeddingProvider, 32);
+    }
+
+    /**
+     * 创建 Milvus VectorTemplate。
+     *
+     * @param properties Milvus 连接配置
+     * @param metadataParser domain 注解解析器
+     * @param embeddingProviderRegistry EmbeddingProvider 注册表
+     * @param defaultEmbeddingProvider 默认 EmbeddingProvider 名称
+     * @param embeddingBatchSize 每次批量生成 embedding 的文本数量
+     */
+    public MilvusVectorTemplate(MilvusClientProperties properties,
+                                DomainMetadataParser metadataParser,
+                                EmbeddingProviderRegistry embeddingProviderRegistry,
+                                String defaultEmbeddingProvider,
+                                int embeddingBatchSize) {
         this.properties = properties;
         this.metadataParser = metadataParser;
         this.embeddingProviderRegistry = embeddingProviderRegistry;
@@ -73,6 +91,11 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         this.accessor = new DomainValueAccessor();
         this.entityMapper = new MilvusEntityMapper(accessor);
         this.filterExpressionBuilder = new FilterExpressionBuilder(accessor);
+        this.embeddingBatchFiller = new DomainEmbeddingBatchFiller(
+                accessor,
+                embeddingProviderRegistry,
+                this.defaultEmbeddingProvider,
+                embeddingBatchSize);
     }
 
     @Override
@@ -96,7 +119,7 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
         Class<?> domainType = entities.iterator().next().getClass();
         VectorCollectionMetadata metadata = metadataParser.parse(domainType);
         collectionManager.ensureCollection(metadata);
-        fillMissingEmbeddings(metadata, entities);
+        embeddingBatchFiller.fillMissingEmbeddings(metadata, entities);
 
         List<JsonObject> rows = new ArrayList<>();
         for (T entity : entities) {
@@ -247,38 +270,6 @@ public class MilvusVectorTemplate implements VectorTemplate, AutoCloseable {
     @Override
     public void close() {
         clientFactory.close();
-    }
-
-    private <T> void fillMissingEmbeddings(VectorCollectionMetadata metadata, Collection<T> entities) {
-        for (EmbeddingFieldMetadata embeddingField : metadata.getEmbeddingFields()) {
-            VectorFieldMetadata textField = metadata.findFieldByJavaName(embeddingField.getTextField())
-                    .orElseThrow(() -> new VectorException(VectorErrorCode.VECTOR_SCHEMA_INVALID,
-                            "找不到 embedding 文本字段: " + embeddingField.getTextField()));
-            VectorFieldMetadata vectorField = metadata.findFieldByJavaName(embeddingField.getVectorField())
-                    .orElseThrow(() -> new VectorException(VectorErrorCode.VECTOR_SCHEMA_INVALID,
-                            "找不到 embedding 向量字段: " + embeddingField.getVectorField()));
-            String providerName = resolveProviderName(embeddingField);
-            EmbeddingProvider provider = embeddingProviderRegistry.require(providerName);
-            EmbeddingOptions options = EmbeddingOptions.builder()
-                    .provider(providerName)
-                    .model(embeddingField.getModel())
-                    .build();
-
-            for (T entity : entities) {
-                Object currentVector = accessor.get(entity, vectorField);
-                if (currentVector != null) {
-                    validateVectorDimension(vectorField, currentVector);
-                    continue;
-                }
-                Object text = accessor.get(entity, textField);
-                if (text == null || String.valueOf(text).trim().isEmpty()) {
-                    continue;
-                }
-                List<Float> vector = provider.embed(Collections.singletonList(String.valueOf(text)), options).get(0);
-                validateVectorDimension(vectorField, vector);
-                accessor.set(entity, vectorField, vector);
-            }
-        }
     }
 
     private String resolveProviderName(EmbeddingFieldMetadata embeddingField) {

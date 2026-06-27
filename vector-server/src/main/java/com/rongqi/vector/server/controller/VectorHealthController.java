@@ -1,5 +1,6 @@
 package com.rongqi.vector.server.controller;
 
+import com.rongqi.vector.server.dto.ApiResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,12 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class VectorHealthController {
 
     @GetMapping("/health")
-    public Map<String, Object> health() {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("success", true);
-        response.put("name", "RongQi Vector");
-        response.put("status", "UP");
-        return response;
+    public ApiResponse<Map<String, Object>> health() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "RongQi Vector");
+        data.put("status", "UP");
+        return ApiResponse.success(data);
     }
 }
-

@@ -2,6 +2,7 @@ package com.rongqi.vector.server.controller;
 
 import com.rongqi.vector.core.VectorDiagnosis;
 import com.rongqi.vector.core.VectorTemplate;
+import com.rongqi.vector.server.dto.ApiResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,13 +23,13 @@ public class VectorDiagnoseController {
     }
 
     @GetMapping("/diagnose")
-    public Map<String, Object> diagnose(@RequestParam("domain") String domainClassName) throws ClassNotFoundException {
+    public ApiResponse<Map<String, Object>> diagnose(@RequestParam("domain") String domainClassName)
+            throws ClassNotFoundException {
         Class<?> domainType = Class.forName(domainClassName);
         VectorDiagnosis diagnosis = vectorTemplate.diagnose(domainType);
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("success", diagnosis.isHealthy());
-        response.put("messages", diagnosis.getMessages());
-        return response;
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("healthy", diagnosis.isHealthy());
+        data.put("messages", diagnosis.getMessages());
+        return ApiResponse.success(data);
     }
 }
-

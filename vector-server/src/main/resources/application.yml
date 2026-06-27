@@ -13,6 +13,7 @@ rongqi:
       database: ${RONGQI_VECTOR_MILVUS_DATABASE:default}
     embedding:
       default-provider: ${RONGQI_VECTOR_EMBEDDING_DEFAULT_PROVIDER:noop}
+      batch-size: ${RONGQI_VECTOR_EMBEDDING_BATCH_SIZE:32}
     http-embedding:
       enabled: ${RONGQI_VECTOR_HTTP_EMBEDDING_ENABLED:false}
       name: ${RONGQI_VECTOR_HTTP_EMBEDDING_NAME:http}

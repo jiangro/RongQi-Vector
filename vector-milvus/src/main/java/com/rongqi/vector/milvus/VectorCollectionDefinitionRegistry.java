@@ -4,6 +4,9 @@ import com.rongqi.vector.core.VectorException;
 import com.rongqi.vector.core.VectorErrorCode;
 import com.rongqi.vector.core.schema.VectorCollectionDefinition;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -70,6 +73,32 @@ public class VectorCollectionDefinitionRegistry {
                             + "请先调用 /api/vector/collections/ensure，或确认 schema 持久化目录已正确加载: " + collection);
         }
         return definition;
+    }
+
+    /**
+     * 查找 Collection 定义。
+     *
+     * <p>和 {@link #require(String)} 不同，未注册时返回 null，适合查询接口自行决定响应格式。</p>
+     *
+     * @param collection Collection 名称
+     * @return 已注册的定义；不存在时返回 null
+     */
+    public VectorCollectionDefinition find(String collection) {
+        if (collection == null || collection.trim().isEmpty()) {
+            return null;
+        }
+        return definitions.get(collection);
+    }
+
+    /**
+     * 列出当前服务已加载的所有 Collection 定义。
+     *
+     * @return 按 collection 名称排序后的 schema 定义列表
+     */
+    public List<VectorCollectionDefinition> listDefinitions() {
+        List<VectorCollectionDefinition> result = new ArrayList<>(definitions.values());
+        result.sort(Comparator.comparing(VectorCollectionDefinition::getCollection));
+        return result;
     }
 
     private void loadFromStore() {

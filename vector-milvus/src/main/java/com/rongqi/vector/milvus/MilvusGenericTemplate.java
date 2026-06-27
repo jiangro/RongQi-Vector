@@ -43,11 +43,29 @@ public class MilvusGenericTemplate {
     private final MilvusCollectionManager collectionManager;
     private final VectorCollectionDefinitionRegistry definitionRegistry;
     private final MilvusTypeMapper typeMapper;
+    private final GenericEmbeddingBatchFiller embeddingBatchFiller;
 
     public MilvusGenericTemplate(MilvusClientProperties properties,
                                  EmbeddingProviderRegistry embeddingProviderRegistry,
                                  String defaultEmbeddingProvider,
                                  VectorCollectionDefinitionRegistry definitionRegistry) {
+        this(properties, embeddingProviderRegistry, defaultEmbeddingProvider, definitionRegistry, 32);
+    }
+
+    /**
+     * 创建 HTTP collection 模式的通用模板。
+     *
+     * @param properties Milvus 连接配置
+     * @param embeddingProviderRegistry EmbeddingProvider 注册表
+     * @param defaultEmbeddingProvider 默认 EmbeddingProvider 名称
+     * @param definitionRegistry HTTP collection schema 注册表
+     * @param embeddingBatchSize 每次批量生成 embedding 的文本数量
+     */
+    public MilvusGenericTemplate(MilvusClientProperties properties,
+                                 EmbeddingProviderRegistry embeddingProviderRegistry,
+                                 String defaultEmbeddingProvider,
+                                 VectorCollectionDefinitionRegistry definitionRegistry,
+                                 int embeddingBatchSize) {
         this.defaultEmbeddingProvider = defaultEmbeddingProvider == null || defaultEmbeddingProvider.trim().isEmpty()
                 ? "noop"
                 : defaultEmbeddingProvider;
@@ -56,6 +74,10 @@ public class MilvusGenericTemplate {
         this.typeMapper = new MilvusTypeMapper();
         this.collectionManager = new MilvusCollectionManager(clientFactory, typeMapper);
         this.definitionRegistry = definitionRegistry;
+        this.embeddingBatchFiller = new GenericEmbeddingBatchFiller(
+                embeddingProviderRegistry,
+                this.defaultEmbeddingProvider,
+                embeddingBatchSize);
     }
 
     /**
@@ -76,9 +98,9 @@ public class MilvusGenericTemplate {
         }
         VectorCollectionDefinition definition = definitionRegistry.require(collection);
         collectionManager.ensureCollection(definition);
+        embeddingBatchFiller.fillMissingEmbeddings(definition, items);
         List<JsonObject> rows = new ArrayList<>();
         for (Map<String, Object> item : items) {
-            fillMissingEmbeddings(definition, item);
             rows.add(toRow(definition, item));
         }
         client().insert(InsertReq.builder()
@@ -195,26 +217,6 @@ public class MilvusGenericTemplate {
         long primaryCount = definition.getFields().stream().filter(VectorFieldDefinition::isPrimaryKey).count();
         if (primaryCount != 1) {
             throw new VectorException(VectorErrorCode.VECTOR_SCHEMA_INVALID, "必须且只能定义一个 primaryKey 字段: " + definition.getCollection());
-        }
-    }
-
-    private void fillMissingEmbeddings(VectorCollectionDefinition definition, Map<String, Object> item) {
-        for (VectorEmbeddingDefinition embedding : definition.getEmbeddings()) {
-            if (item.get(embedding.getVectorField()) != null) {
-                continue;
-            }
-            Object text = item.get(embedding.getTextField());
-            if (text == null || String.valueOf(text).trim().isEmpty()) {
-                continue;
-            }
-            VectorFieldDefinition vectorField = requireField(definition, embedding.getVectorField());
-            String providerName = resolveProviderName(embedding);
-            List<Float> vector = embeddingProviderRegistry.require(providerName)
-                    .embed(Collections.singletonList(String.valueOf(text)),
-                            EmbeddingOptions.builder().provider(providerName).model(embedding.getModel()).build())
-                    .get(0);
-            validateVectorDimension(vectorField, vector);
-            item.put(embedding.getVectorField(), vector);
         }
     }
 

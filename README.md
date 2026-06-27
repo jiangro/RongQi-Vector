@@ -124,6 +124,7 @@ rongqi:
       database: default
     embedding:
       default-provider: http
+      batch-size: 32
     http-embedding:
       enabled: true
       name: http
@@ -143,6 +144,7 @@ rongqi:
 | `rongqi.vector.milvus.token` | 否 | Milvus token，没有鉴权可为空 | `<your-milvus-token>` |
 | `rongqi.vector.milvus.database` | 否 | 默认 database，domain 注解没写 database 时使用 | `default` |
 | `rongqi.vector.embedding.default-provider` | 是 | 默认 EmbeddingProvider 名称 | `http` |
+| `rongqi.vector.embedding.batch-size` | 否 | 批量写入时每次调用 EmbeddingProvider 的文本数量，非法值会回退为 32 | `32` |
 | `rongqi.vector.http-embedding.enabled` | 否 | 是否启用内置 HTTP EmbeddingProvider | `true` |
 | `rongqi.vector.http-embedding.name` | 否 | 内置 HTTP Provider 名称 | `http` |
 | `rongqi.vector.http-embedding.url` | 使用 HTTP Provider 时必填 | Embedding 服务地址，OpenAI 兼容 base url 会自动补 `/embeddings` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
@@ -451,6 +453,7 @@ http://127.0.0.1:18080
 | `RONGQI_VECTOR_MILVUS_TOKEN` | 视 Milvus 而定 | 空 | Milvus token |
 | `RONGQI_VECTOR_MILVUS_DATABASE` | 否 | `default` | 默认 database |
 | `RONGQI_VECTOR_EMBEDDING_DEFAULT_PROVIDER` | 是 | `noop` | 默认 EmbeddingProvider 名称，真实搜索建议设置为 `http` 或自定义名称 |
+| `RONGQI_VECTOR_EMBEDDING_BATCH_SIZE` | 否 | `32` | 批量写入时每次调用 EmbeddingProvider 的文本数量 |
 | `RONGQI_VECTOR_HTTP_EMBEDDING_ENABLED` | 使用 HTTP Provider 时必填 | `false` | 是否启用内置 HTTP EmbeddingProvider |
 | `RONGQI_VECTOR_HTTP_EMBEDDING_NAME` | 否 | `http` | HTTP Provider 名称 |
 | `RONGQI_VECTOR_HTTP_EMBEDDING_URL` | 使用 HTTP Provider 时必填 | 空 | Embedding 服务地址 |

@@ -66,7 +66,8 @@ public class RongQiVectorAutoConfiguration {
                 milvus,
                 metadataParser,
                 embeddingProviderRegistry,
-                properties.getEmbedding().getDefaultProvider());
+                properties.getEmbedding().getDefaultProvider(),
+                properties.getEmbedding().getBatchSize());
     }
 
     @Bean
@@ -91,7 +92,8 @@ public class RongQiVectorAutoConfiguration {
                 milvus,
                 embeddingProviderRegistry,
                 properties.getEmbedding().getDefaultProvider(),
-                definitionRegistry);
+                definitionRegistry,
+                properties.getEmbedding().getBatchSize());
     }
 
     private HttpEmbeddingProperties toHttpEmbeddingProperties(RongQiVectorProperties.HttpEmbedding source) {
