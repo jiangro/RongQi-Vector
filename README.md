@@ -18,6 +18,37 @@ RongQi Vector 的目标是：
 - **灵活扩展**：字段、Collection、索引、Embedding 模型都可以自定义。
 - **统一规范**：后续业务系统接入向量搜索时，调用方式、错误格式、开发规范保持一致。
 
+## 常见专业名词说明
+
+如果你第一次接触向量检索，可以先看这一节。下面这些词会在配置、注解、HTTP 请求和源码中反复出现。
+
+| 名词 | 简单理解 | 在本项目中的例子 |
+| --- | --- | --- |
+| `Vector` / 向量 | 一串数字，用来表示一段文本的语义。意思相近的文本，向量距离通常更近。 | `[0.12, -0.03, 0.98, ...]` |
+| `Embedding` / 文本向量化 | 把文本转换成向量的过程。比如把“发票怎么申请”转换成一组数字。 | `EmbeddingProvider.embed(texts, options)` |
+| `EmbeddingProvider` | 真正负责调用向量模型的组件。可以是 HTTP 模型服务，也可以是你自己实现的本地模型。 | `http`、`noop`、`local-bge` |
+| `Model` / 模型 | 生成向量的具体模型名称。不同模型输出维度可能不同。 | `text-embedding-v4` |
+| `Dimension` / 向量维度 | 每条向量有多少个数字。模型输出 1024 个数字，字段维度就必须配置成 1024。 | `dimension: 1024` |
+| `Milvus` | 专门存储和检索向量的数据库。业务数据和向量最终会写入 Milvus。 | `http://127.0.0.1:19530` |
+| `Collection` | Milvus 中的一张“表”。同一类业务数据通常放在同一个 Collection 里。 | `knowledge_chunk_v1` |
+| `Schema` | Collection 的结构定义，说明有哪些字段、字段类型是什么、哪个字段是向量字段。 | `fields`、`indexes`、`embeddings` |
+| `Field` / 字段 | Collection 中的一列数据。可以是主键、标题、正文、向量等。 | `chunk_id`、`title`、`content`、`embedding` |
+| `PrimaryKey` / 主键 | 每条数据的唯一标识，用来删除、更新或区分不同数据。 | `chunk_id` |
+| `AutoId` | 主键是否由 Milvus 自动生成。开启后写入时通常不需要手动传主键。 | `autoId: true` |
+| `Index` / 索引 | 给向量字段建立的检索结构。没有索引时，大数据量搜索会很慢。 | `HNSW`、`AUTOINDEX` |
+| `MetricType` / 距离算法 | 判断两个向量是否相似的计算方式。不同模型和业务可能使用不同算法。 | `COSINE`、`IP`、`L2` |
+| `TopK` | 搜索时最多返回多少条最相似的数据。 | `topK: 10` |
+| `Score` / 相似度分数 | 搜索结果的相似程度。通常用于排序或过滤低质量结果。 | `minScore: 0.7` |
+| `Filter` / 过滤条件 | 在向量搜索外，再按字段筛选数据。比如只查某个租户、某个业务类型。 | `tenant_id == 1001` |
+| `LIKE` / 模糊匹配 | 字符串包含匹配。本项目会自动帮你补 `%`，用户只传关键词即可。 | 传入 `发票` 会变成 `%发票%` |
+| `OutputFields` | 搜索结果需要返回哪些字段。只返回必要字段可以减少响应体大小。 | `chunk_id`、`title`、`content` |
+| `Upsert` | 写入或更新数据。主键已存在时通常表示更新，不存在时表示新增。 | `/api/vector/documents/upsert` |
+| `BatchSize` | 批量处理时每批多少条数据。比如每 32 条文本调用一次 Embedding 服务。 | `batch-size: 32` |
+| `Timeout` | 请求外部服务最多等待多久。超过时间还没响应就认为失败。 | `timeout-millis: 30000` |
+| `Retry` / 重试 | 遇到临时网络错误或服务 5xx 时自动再试几次，提高稳定性。 | `max-retries: 2` |
+| `Token` / 密钥 | 访问 Milvus 或 Embedding 服务需要的鉴权信息。生产环境不要写死在代码里。 | `api-key`、`token` |
+| `DynamicField` / 动态字段 | Milvus 是否允许写入 schema 里没有提前定义的字段。通常建议先关闭，避免脏数据。 | `dynamicFieldEnabled: false` |
+
 ## 整体架构
 
 ```text
