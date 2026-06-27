@@ -112,12 +112,16 @@ class DomainEmbeddingBatchFiller {
         for (int from = 0; from < pendingTexts.size(); from += batchSize) {
             int to = Math.min(from + batchSize, pendingTexts.size());
             List<String> batchTexts = pendingTexts.subList(from, to);
-            List<List<Float>> vectors = provider.embed(batchTexts, options);
-            validateEmbeddingResultSize(vectorField, batchTexts, vectors);
-            for (int i = 0; i < batchTexts.size(); i++) {
-                List<Float> vector = vectors.get(i);
-                validateVectorDimension(vectorField, vector);
-                accessor.set(pendingEntities.get(from + i), vectorField, vector);
+            try {
+                List<List<Float>> vectors = provider.embed(batchTexts, options);
+                validateEmbeddingResultSize(vectorField, batchTexts, vectors);
+                for (int i = 0; i < batchTexts.size(); i++) {
+                    List<Float> vector = vectors.get(i);
+                    validateVectorDimension(vectorField, vector);
+                    accessor.set(pendingEntities.get(from + i), vectorField, vector);
+                }
+            } catch (VectorException exception) {
+                throw batchException(vectorField.getJavaName(), from, to, exception);
             }
         }
     }
@@ -158,5 +162,14 @@ class DomainEmbeddingBatchFiller {
                     "向量维度不匹配: " + field.getJavaName()
                             + ", expected=" + field.getDimension() + ", actual=" + vector.size());
         }
+    }
+
+    private VectorException batchException(String fieldName, int batchStart, int batchEnd, VectorException cause) {
+        return new VectorException(cause.getCode(),
+                "批量 Embedding 失败: field=" + fieldName
+                        + ", batchStart=" + batchStart
+                        + ", batchEnd=" + batchEnd
+                        + ", cause=" + cause.getMessage(),
+                cause);
     }
 }

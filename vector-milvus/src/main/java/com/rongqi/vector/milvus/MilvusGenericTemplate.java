@@ -44,6 +44,7 @@ public class MilvusGenericTemplate {
     private final VectorCollectionDefinitionRegistry definitionRegistry;
     private final MilvusTypeMapper typeMapper;
     private final GenericEmbeddingBatchFiller embeddingBatchFiller;
+    private final MilvusFilterExpressionFormatter filterFormatter;
 
     public MilvusGenericTemplate(MilvusClientProperties properties,
                                  EmbeddingProviderRegistry embeddingProviderRegistry,
@@ -74,6 +75,7 @@ public class MilvusGenericTemplate {
         this.typeMapper = new MilvusTypeMapper();
         this.collectionManager = new MilvusCollectionManager(clientFactory, typeMapper);
         this.definitionRegistry = definitionRegistry;
+        this.filterFormatter = new MilvusFilterExpressionFormatter();
         this.embeddingBatchFiller = new GenericEmbeddingBatchFiller(
                 embeddingProviderRegistry,
                 this.defaultEmbeddingProvider,
@@ -192,9 +194,9 @@ public class MilvusGenericTemplate {
             VectorFieldDefinition idField = resolvePrimaryKey(definition);
             for (Object id : ids) {
                 client().delete(DeleteReq.builder()
-                        .collectionName(definition.getCollection())
-                        .filter(idField.getName() + " == " + formatValue(id))
-                        .build());
+                .collectionName(definition.getCollection())
+                .filter(filterFormatter.toCondition(idField.getName(), FilterOperator.EQ, id))
+                .build());
                 count++;
             }
             return new DeleteResult(count);
@@ -271,11 +273,7 @@ public class MilvusGenericTemplate {
             for (Map.Entry<String, Object> entry : filterObject.entrySet()) {
                 VectorFieldDefinition field = requireField(definition, entry.getKey());
                 validateFilterable(field);
-                if (entry.getValue() instanceof Collection) {
-                    conditions.add(toListCondition(field.getName(), "in", entry.getValue()));
-                } else {
-                    conditions.add(toCondition(field.getName(), FilterOperator.EQ, entry.getValue()));
-                }
+                conditions.add(filterFormatter.toCondition(field.getName(), FilterOperator.EQ, entry.getValue()));
             }
         }
         if (filterConditions != null) {
@@ -286,7 +284,7 @@ public class MilvusGenericTemplate {
                 }
                 VectorFieldDefinition field = requireField(definition, condition.getField());
                 validateFilterable(field);
-                conditions.add(toCondition(field.getName(), condition.getOperator(), condition.getValue()));
+                conditions.add(filterFormatter.toCondition(field.getName(), condition.getOperator(), condition.getValue()));
             }
         }
         return String.join(" and ", conditions);
@@ -297,61 +295,6 @@ public class MilvusGenericTemplate {
             throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
                     "字段不允许作为过滤条件: " + field.getName());
         }
-    }
-
-    private String toCondition(String fieldName, FilterOperator operator, Object value) {
-        if (value == null) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    "过滤条件的值不能为空: " + fieldName);
-        }
-        FilterOperator actualOperator = operator == null ? FilterOperator.EQ : operator;
-        switch (actualOperator) {
-            case EQ:
-                if (value instanceof Collection) {
-                    return toListCondition(fieldName, "in", value);
-                }
-                return fieldName + " == " + formatValue(value);
-            case NE:
-                return fieldName + " != " + formatValue(value);
-            case GT:
-                return fieldName + " > " + formatValue(value);
-            case GTE:
-                return fieldName + " >= " + formatValue(value);
-            case LT:
-                return fieldName + " < " + formatValue(value);
-            case LTE:
-                return fieldName + " <= " + formatValue(value);
-            case IN:
-                return toListCondition(fieldName, "in", value);
-            case NOT_IN:
-                return toListCondition(fieldName, "not in", value);
-            case LIKE:
-                if (!(value instanceof CharSequence)) {
-                    throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                            "like 过滤条件的值必须是字符串: " + fieldName);
-                }
-                return fieldName + " like " + formatValue(normalizeLikePattern(value));
-            default:
-                throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                        "不支持的过滤操作符: " + actualOperator);
-        }
-    }
-
-    private String toListCondition(String fieldName, String operator, Object value) {
-        if (!(value instanceof Collection)) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    operator + " 过滤条件的值必须是集合: " + fieldName);
-        }
-        Collection<?> values = (Collection<?>) value;
-        if (values.isEmpty()) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    operator + " 过滤条件的值不能为空: " + fieldName);
-        }
-        List<String> formattedValues = new ArrayList<>();
-        for (Object item : values) {
-            formattedValues.add(formatValue(item));
-        }
-        return fieldName + " " + operator + " [" + String.join(",", formattedValues) + "]";
     }
 
     private VectorFieldDefinition requireField(VectorCollectionDefinition definition, String fieldName) {
@@ -458,26 +401,6 @@ public class MilvusGenericTemplate {
             return value;
         }
         return value.substring(0, maxLength);
-    }
-
-    private String formatValue(Object value) {
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        return "\"" + String.valueOf(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-    }
-
-    /**
-     * 规范化 LIKE 条件。
-     *
-     * <p>HTTP 调用方只需要传关键词；没有显式传入 % 时，框架默认按包含匹配处理。</p>
-     */
-    private String normalizeLikePattern(Object value) {
-        String pattern = String.valueOf(value);
-        if (pattern.contains("%")) {
-            return pattern;
-        }
-        return "%" + pattern + "%";
     }
 
     private MilvusClientV2 client() {

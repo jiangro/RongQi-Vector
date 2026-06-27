@@ -22,6 +22,8 @@ rongqi:
       model: ${RONGQI_VECTOR_HTTP_EMBEDDING_MODEL:}
       dimension: ${RONGQI_VECTOR_HTTP_EMBEDDING_DIMENSION:1024}
       timeout-millis: ${RONGQI_VECTOR_HTTP_EMBEDDING_TIMEOUT_MILLIS:30000}
+      max-retries: ${RONGQI_VECTOR_HTTP_EMBEDDING_MAX_RETRIES:2}
+      retry-interval-millis: ${RONGQI_VECTOR_HTTP_EMBEDDING_RETRY_INTERVAL_MILLIS:500}
     schema:
       type: ${RONGQI_VECTOR_SCHEMA_TYPE:file}
       storage-dir: ${RONGQI_VECTOR_SCHEMA_STORAGE_DIR:data/rongqi-vector/collections}

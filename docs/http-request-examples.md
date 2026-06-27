@@ -206,12 +206,12 @@ Content-Type: application/json
     { "field": "tenant_id", "operator": "LT", "value": 2000 },
     { "field": "business_code", "operator": "IN", "value": ["faq", "invoice"] },
     { "field": "business_code", "operator": "NOT_IN", "value": ["draft"] },
-    { "field": "title", "operator": "LIKE", "value": "%发票%" }
+    { "field": "title", "operator": "LIKE", "value": "发票" }
   ]
 }
 ```
 
-`filters.operator` 支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE`。过滤字段必须是主键字段，或者在 collection schema 中配置 `filterable=true`。
+`filters.operator` 支持 `EQ`、`NE`、`GT`、`GTE`、`LT`、`LTE`、`IN`、`NOT_IN`、`LIKE`。过滤字段必须是主键字段，或者在 collection schema 中配置 `filterable=true`。`LIKE` 值不包含 `%` 时会自动按包含匹配处理，例如传 `发票` 会按 `%发票%` 查询。
 
 按已有向量搜索：
 

@@ -7,16 +7,15 @@ import com.rongqi.vector.core.VectorException;
 import com.rongqi.vector.core.metadata.VectorCollectionMetadata;
 import com.rongqi.vector.core.metadata.VectorFieldMetadata;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.StringJoiner;
 
 /**
  * 将 domain 条件对象和显式搜索过滤条件转换成 Milvus filter 表达式。
  */
 public class FilterExpressionBuilder {
     private final DomainValueAccessor accessor;
+    private final MilvusFilterExpressionFormatter formatter;
 
     /**
      * 创建过滤表达式构建器。
@@ -25,6 +24,7 @@ public class FilterExpressionBuilder {
      */
     public FilterExpressionBuilder(DomainValueAccessor accessor) {
         this.accessor = accessor;
+        this.formatter = new MilvusFilterExpressionFormatter();
     }
 
     /**
@@ -102,77 +102,6 @@ public class FilterExpressionBuilder {
     }
 
     private String toCondition(String fieldName, FilterOperator operator, Object value) {
-        if (value == null) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    "过滤条件的值不能为空: " + fieldName);
-        }
-        FilterOperator actualOperator = operator == null ? FilterOperator.EQ : operator;
-        switch (actualOperator) {
-            case EQ:
-                if (value instanceof Collection) {
-                    return toListCondition(fieldName, "in", value);
-                }
-                return fieldName + " == " + formatValue(value);
-            case NE:
-                return fieldName + " != " + formatValue(value);
-            case GT:
-                return fieldName + " > " + formatValue(value);
-            case GTE:
-                return fieldName + " >= " + formatValue(value);
-            case LT:
-                return fieldName + " < " + formatValue(value);
-            case LTE:
-                return fieldName + " <= " + formatValue(value);
-            case IN:
-                return toListCondition(fieldName, "in", value);
-            case NOT_IN:
-                return toListCondition(fieldName, "not in", value);
-            case LIKE:
-                if (!(value instanceof CharSequence)) {
-                    throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                            "like 过滤条件的值必须是字符串: " + fieldName);
-                }
-                return fieldName + " like " + formatValue(normalizeLikePattern(value));
-            default:
-                throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                        "不支持的过滤操作符: " + actualOperator);
-        }
-    }
-
-    private String toListCondition(String fieldName, String operator, Object value) {
-        if (!(value instanceof Collection)) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    operator + " 过滤条件的值必须是集合: " + fieldName);
-        }
-        Collection<?> values = (Collection<?>) value;
-        if (values.isEmpty()) {
-            throw new VectorException(VectorErrorCode.VECTOR_FILTER_INVALID,
-                    operator + " 过滤条件的值不能为空: " + fieldName);
-        }
-        StringJoiner joiner = new StringJoiner(",", fieldName + " " + operator + " [", "]");
-        for (Object item : values) {
-            joiner.add(formatValue(item));
-        }
-        return joiner.toString();
-    }
-
-    private String formatValue(Object value) {
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        return "\"" + String.valueOf(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-    }
-
-    /**
-     * 规范化 LIKE 条件。
-     *
-     * <p>业务用户通常只关心要搜索的关键词，因此没有显式传入 % 时，默认按包含匹配处理。</p>
-     */
-    private String normalizeLikePattern(Object value) {
-        String pattern = String.valueOf(value);
-        if (pattern.contains("%")) {
-            return pattern;
-        }
-        return "%" + pattern + "%";
+        return formatter.toCondition(fieldName, operator, value);
     }
 }

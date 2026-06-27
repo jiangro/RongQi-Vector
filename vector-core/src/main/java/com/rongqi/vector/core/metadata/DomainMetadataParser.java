@@ -85,6 +85,7 @@ public class DomainMetadataParser {
                 collection.autoCreate(),
                 collection.autoCreateIndex(),
                 collection.validateSchema(),
+                collection.dynamicFieldEnabled(),
                 fields,
                 embeddingFields,
                 indexes);

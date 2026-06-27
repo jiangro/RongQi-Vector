@@ -16,12 +16,14 @@ public class VectorCollectionMetadata {
     private final boolean autoCreate;
     private final boolean autoCreateIndex;
     private final boolean validateSchema;
+    private final boolean dynamicFieldEnabled;
     private final List<VectorFieldMetadata> fields;
     private final List<EmbeddingFieldMetadata> embeddingFields;
     private final List<VectorIndexMetadata> indexes;
 
     public VectorCollectionMetadata(Class<?> domainType, String collectionName, String database, String description,
                                     boolean autoCreate, boolean autoCreateIndex, boolean validateSchema,
+                                    boolean dynamicFieldEnabled,
                                     List<VectorFieldMetadata> fields,
                                     List<EmbeddingFieldMetadata> embeddingFields,
                                     List<VectorIndexMetadata> indexes) {
@@ -32,6 +34,7 @@ public class VectorCollectionMetadata {
         this.autoCreate = autoCreate;
         this.autoCreateIndex = autoCreateIndex;
         this.validateSchema = validateSchema;
+        this.dynamicFieldEnabled = dynamicFieldEnabled;
         this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
         this.embeddingFields = Collections.unmodifiableList(new ArrayList<>(embeddingFields));
         this.indexes = Collections.unmodifiableList(new ArrayList<>(indexes));
@@ -63,6 +66,10 @@ public class VectorCollectionMetadata {
 
     public boolean isValidateSchema() {
         return validateSchema;
+    }
+
+    public boolean isDynamicFieldEnabled() {
+        return dynamicFieldEnabled;
     }
 
     public List<VectorFieldMetadata> getFields() {

@@ -13,9 +13,11 @@ import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.AddFieldReq;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
+import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.request.GetLoadStateReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.collection.request.LoadCollectionReq;
+import io.milvus.v2.service.collection.response.DescribeCollectionResp;
 import io.milvus.v2.service.index.request.CreateIndexReq;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,10 +28,12 @@ import java.util.List;
 public class MilvusCollectionManager {
     private final MilvusClientFactory clientFactory;
     private final MilvusTypeMapper typeMapper;
+    private final MilvusSchemaValidator schemaValidator;
 
     public MilvusCollectionManager(MilvusClientFactory clientFactory, MilvusTypeMapper typeMapper) {
         this.clientFactory = clientFactory;
         this.typeMapper = typeMapper;
+        this.schemaValidator = new MilvusSchemaValidator();
     }
 
     /**
@@ -42,6 +46,13 @@ public class MilvusCollectionManager {
                 .collectionName(metadata.getCollectionName())
                 .build());
         if (exists) {
+            if (metadata.isValidateSchema()) {
+                schemaValidator.validate(
+                        metadata.getCollectionName(),
+                        toExpectedFields(metadata),
+                        metadata.isDynamicFieldEnabled(),
+                        describeCollection(metadata.getCollectionName()));
+            }
             loadCollectionIfNeeded(metadata);
             return;
         }
@@ -73,6 +84,13 @@ public class MilvusCollectionManager {
                 .collectionName(definition.getCollection())
                 .build());
         if (exists) {
+            if (definition.isValidateSchema()) {
+                schemaValidator.validate(
+                        definition.getCollection(),
+                        toExpectedFields(definition),
+                        definition.isDynamicFieldEnabled(),
+                        describeCollection(definition.getCollection()));
+            }
             loadCollectionIfNeeded(definition.getCollection());
             return;
         }
@@ -143,6 +161,34 @@ public class MilvusCollectionManager {
             }
         }
         return builder.build();
+    }
+
+    private List<MilvusSchemaValidator.ExpectedField> toExpectedFields(VectorCollectionMetadata metadata) {
+        List<MilvusSchemaValidator.ExpectedField> fields = new ArrayList<>();
+        for (VectorFieldMetadata field : metadata.getFields()) {
+            fields.add(new MilvusSchemaValidator.ExpectedField(
+                    field.getVectorName(),
+                    typeMapper.toMilvusDataType(field.getType()),
+                    field.isId(),
+                    field.isAutoId(),
+                    field.getMaxLength(),
+                    field.getDimension()));
+        }
+        return fields;
+    }
+
+    private List<MilvusSchemaValidator.ExpectedField> toExpectedFields(VectorCollectionDefinition definition) {
+        List<MilvusSchemaValidator.ExpectedField> fields = new ArrayList<>();
+        for (VectorFieldDefinition field : definition.getFields()) {
+            fields.add(new MilvusSchemaValidator.ExpectedField(
+                    field.getName(),
+                    typeMapper.toMilvusDataType(field.getType()),
+                    field.isPrimaryKey(),
+                    field.isAutoId(),
+                    field.getMaxLength(),
+                    field.getDimension()));
+        }
+        return fields;
     }
 
     private AddFieldReq toAddFieldReq(VectorFieldDefinition field) {
@@ -242,6 +288,12 @@ public class MilvusCollectionManager {
         client().loadCollection(LoadCollectionReq.builder()
                 .collectionName(collectionName)
                 .sync(true)
+                .build());
+    }
+
+    private DescribeCollectionResp describeCollection(String collectionName) {
+        return client().describeCollection(DescribeCollectionReq.builder()
+                .collectionName(collectionName)
                 .build());
     }
 

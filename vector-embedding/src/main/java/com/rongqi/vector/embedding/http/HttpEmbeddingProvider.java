@@ -40,6 +40,26 @@ public class HttpEmbeddingProvider implements EmbeddingProvider {
             throw new VectorException(VectorErrorCode.VECTOR_CONFIG_INVALID,
                     "HTTP EmbeddingProvider 缺少 url: " + name());
         }
+        VectorException lastException = null;
+        int maxAttempts = properties.getMaxRetries() + 1;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return doEmbed(texts, options);
+            } catch (VectorException exception) {
+                lastException = exception;
+                if (!shouldRetry(exception, attempt, maxAttempts)) {
+                    throw exception;
+                }
+                sleepBeforeRetry();
+            }
+        }
+        throw lastException;
+    }
+
+    /**
+     * 执行单次 HTTP Embedding 请求。
+     */
+    private List<List<Float>> doEmbed(List<String> texts, EmbeddingOptions options) {
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(resolveEndpoint()).openConnection();
             connection.setRequestMethod("POST");
@@ -60,7 +80,10 @@ public class HttpEmbeddingProvider implements EmbeddingProvider {
             String responseBody = readResponse(connection, status);
             if (status < 200 || status >= 300) {
                 throw new VectorException(VectorErrorCode.VECTOR_EMBEDDING_FAILED,
-                        "HTTP Embedding 调用失败，status=" + status + ", body=" + abbreviate(responseBody));
+                        "HTTP Embedding 调用失败，provider=" + name()
+                                + ", model=" + resolveModel(options)
+                                + ", status=" + status
+                                + ", body=" + abbreviate(responseBody));
             }
             EmbeddingResponse response = GSON.fromJson(responseBody, EmbeddingResponse.class);
             if (response == null || response.data == null || response.data.isEmpty()) {
@@ -74,7 +97,9 @@ public class HttpEmbeddingProvider implements EmbeddingProvider {
             return vectors;
         } catch (IOException exception) {
             throw new VectorException(VectorErrorCode.VECTOR_EMBEDDING_FAILED,
-                    "HTTP Embedding 网络异常: " + exception.getMessage(), exception);
+                    "HTTP Embedding 网络异常，provider=" + name()
+                            + ", model=" + resolveModel(options)
+                            + ": " + exception.getMessage(), exception);
         }
     }
 
@@ -102,6 +127,9 @@ public class HttpEmbeddingProvider implements EmbeddingProvider {
     }
 
     private String readResponse(HttpURLConnection connection, int status) throws IOException {
+        if (status < 200 || status >= 300 && connection.getErrorStream() == null) {
+            return "";
+        }
         BufferedReader reader = new BufferedReader(new InputStreamReader(
                 status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream(),
                 StandardCharsets.UTF_8));
@@ -118,6 +146,36 @@ public class HttpEmbeddingProvider implements EmbeddingProvider {
             return value;
         }
         return value.substring(0, 500);
+    }
+
+    private boolean shouldRetry(VectorException exception, int attempt, int maxAttempts) {
+        if (attempt >= maxAttempts) {
+            return false;
+        }
+        Throwable cause = exception.getCause();
+        if (cause instanceof IOException) {
+            return true;
+        }
+        String message = exception.getMessage();
+        return message != null && (message.contains("status=429")
+                || message.contains("status=500")
+                || message.contains("status=502")
+                || message.contains("status=503")
+                || message.contains("status=504"));
+    }
+
+    private void sleepBeforeRetry() {
+        int interval = properties.getRetryIntervalMillis();
+        if (interval <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(interval);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new VectorException(VectorErrorCode.VECTOR_EMBEDDING_FAILED,
+                    "HTTP Embedding 重试等待被中断: " + exception.getMessage(), exception);
+        }
     }
 
     private static class EmbeddingRequest {

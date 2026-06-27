@@ -104,6 +104,8 @@ public class RongQiVectorAutoConfiguration {
         target.setModel(source.getModel());
         target.setDimension(source.getDimension());
         target.setTimeoutMillis(source.getTimeoutMillis());
+        target.setMaxRetries(source.getMaxRetries());
+        target.setRetryIntervalMillis(source.getRetryIntervalMillis());
         return target;
     }
 

@@ -10,6 +10,8 @@ public class HttpEmbeddingProperties {
     private String model;
     private int dimension = 1024;
     private int timeoutMillis = 30000;
+    private int maxRetries = 2;
+    private int retryIntervalMillis = 500;
 
     public String getName() {
         return name;
@@ -58,5 +60,28 @@ public class HttpEmbeddingProperties {
     public void setTimeoutMillis(int timeoutMillis) {
         this.timeoutMillis = timeoutMillis;
     }
-}
 
+    public int getMaxRetries() {
+        return Math.max(0, maxRetries);
+    }
+
+    /**
+     * 设置最大重试次数。
+     *
+     * <p>这里表示首次请求失败后最多再试几次，默认 2 次。</p>
+     */
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
+
+    public int getRetryIntervalMillis() {
+        return Math.max(0, retryIntervalMillis);
+    }
+
+    /**
+     * 设置重试间隔毫秒数。
+     */
+    public void setRetryIntervalMillis(int retryIntervalMillis) {
+        this.retryIntervalMillis = retryIntervalMillis;
+    }
+}
