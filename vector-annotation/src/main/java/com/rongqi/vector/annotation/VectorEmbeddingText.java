@@ -19,17 +19,22 @@ public @interface VectorEmbeddingText {
 
     /**
      * 生成的向量要写入哪个 Java 字段。
+     *
+     * <p>这里填写 Java domain 中的向量字段名，例如 content 生成的向量写入 embedding 字段。</p>
      */
     String vectorField();
 
     /**
      * 指定 embedding provider 名称。为空时使用默认 provider。
+     *
+     * <p>provider 名称需要和配置中的 rongqi.vector.embedding.default-provider 或自定义 Provider 的 name() 对应。</p>
      */
     String provider() default "";
 
     /**
      * 指定 embedding 模型名称。为空时使用 provider 默认模型。
+     *
+     * <p>如果同一个 Provider 支持多个模型，可以通过该字段为不同文本字段指定不同模型。</p>
      */
     String model() default "";
 }
-
